@@ -1,0 +1,13 @@
+menu "Shahbaz safety supervision"
+
+config SHAHBAZ_HEARTBEAT_TIMEOUT_MS
+    int "Valid heartbeat timeout in milliseconds"
+    default 0
+    range 0 60000
+    help
+        Zero is the fail-closed default: communication health expires
+        immediately. Select a nonzero value only after the host heartbeat
+        period and measured scheduling/USB latency have been reviewed.
+
+endmenu
+

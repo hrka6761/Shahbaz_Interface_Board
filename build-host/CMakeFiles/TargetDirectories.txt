@@ -1,0 +1,17 @@
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/domain_measurement_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/board_profile_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/espidf_i2c_error_mapping_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/fixed_priority_queue_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/task_health_monitor_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/sensor_sht30_domain_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/sensor_ms5611_domain_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/sensor_scheduler_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/telemetry_protocol_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/safety_supervisor_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/null_actuator_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/command_dispatcher_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/pwm_math_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/device_link_test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/test.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/edit_cache.dir
+D:/Projects/Personal/Shahbaz board/build-host/CMakeFiles/rebuild_cache.dir

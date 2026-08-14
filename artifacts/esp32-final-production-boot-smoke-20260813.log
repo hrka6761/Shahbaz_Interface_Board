@@ -1,0 +1,200 @@
+2026-08-13T19:56:39.825+03:30 ESP-ROM:esp32s3-20210327
+2026-08-13T19:56:39.825+03:30 Build:Mar 27 2021
+2026-08-13T19:56:39.825+03:30 rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+2026-08-13T19:56:39.825+03:30 SPIWP:0xee
+2026-08-13T19:56:39.825+03:30 mode:DIO, clock div:1
+2026-08-13T19:56:39.825+03:30 load:0x3fce2820,len:0x16d0
+2026-08-13T19:56:39.825+03:30 load:0x403c8700,len:0x4
+2026-08-13T19:56:39.825+03:30 load:0x403c8704,len:0xec8
+2026-08-13T19:56:39.825+03:30 load:0x403cb700,len:0x3160
+2026-08-13T19:56:39.825+03:30 entry 0x403c8950
+2026-08-13T19:56:39.825+03:30 I (27) boot: ESP-IDF v5.4.4 2nd stage bootloader
+2026-08-13T19:56:39.825+03:30 I (27) boot: compile time Aug 13 2026 19:55:15
+2026-08-13T19:56:39.825+03:30 I (27) boot: Multicore bootloader
+2026-08-13T19:56:39.825+03:30 I (27) boot: chip revision: v0.2
+2026-08-13T19:56:39.825+03:30 I (30) boot: efuse block revision: v1.4
+2026-08-13T19:56:39.825+03:30 I (33) qio_mode: Enabling default flash chip QIO
+2026-08-13T19:56:39.825+03:30 I (38) boot.esp32s3: Boot SPI Speed : 80MHz
+2026-08-13T19:56:39.825+03:30 I (42) boot.esp32s3: SPI Mode       : QIO
+2026-08-13T19:56:39.825+03:30 I (45) boot.esp32s3: SPI Flash Size : 16MB
+2026-08-13T19:56:39.825+03:30 I (49) boot: Enabling RNG early entropy source...
+2026-08-13T19:56:39.825+03:30 I (54) boot: Partition Table:
+2026-08-13T19:56:39.825+03:30 I (56) boot: ## Label            Usage          Type ST Offset   Length
+2026-08-13T19:56:39.825+03:30 I (63) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+2026-08-13T19:56:39.825+03:30 I (69) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+2026-08-13T19:56:39.825+03:30 I (76) boot:  2 factory          factory app      00 00 00010000 00c00000
+2026-08-13T19:56:39.825+03:30 I (82) boot:  3 coredump         Unknown data     01 03 00c10000 00100000
+2026-08-13T19:56:39.825+03:30 I (89) boot:  4 diagnostic       WiFi data        01 02 00d10000 002f0000
+2026-08-13T19:56:39.826+03:30 I (95) boot: End of partition table
+2026-08-13T19:56:39.826+03:30 I (98) esp_image: segment 0: paddr=00010020 vaddr=3c030020 size=0ccd8h ( 52440) map
+2026-08-13T19:56:39.826+03:30 I (114) esp_image: segment 1: paddr=0001cd00 vaddr=3fc94900 size=03318h ( 13080) load
+2026-08-13T19:56:39.826+03:30 I (116) esp_image: segment 2: paddr=00020020 vaddr=42000020 size=2470ch (149260) map
+2026-08-13T19:56:39.826+03:30 I (143) esp_image: segment 3: paddr=00044734 vaddr=3fc97c18 size=00640h (  1600) load
+2026-08-13T19:56:39.826+03:30 I (144) esp_image: segment 4: paddr=00044d7c vaddr=40374000 size=10814h ( 67604) load
+2026-08-13T19:56:39.826+03:30 I (160) esp_image: segment 5: paddr=00055598 vaddr=50000000 size=0001ch (    28) load
+2026-08-13T19:56:39.826+03:30 I (166) boot: Loaded app from partition at offset 0x10000
+2026-08-13T19:56:39.826+03:30 I (167) boot: Disabling RNG early entropy source...
+2026-08-13T19:56:39.826+03:30 I (178) octal_psram: vendor id    : 0x0d (AP)
+2026-08-13T19:56:39.826+03:30 I (178) octal_psram: dev id       : 0x02 (generation 3)
+2026-08-13T19:56:39.826+03:30 I (178) octal_psram: density      : 0x03 (64 Mbit)
+2026-08-13T19:56:39.826+03:30 I (180) octal_psram: good-die     : 0x01 (Pass)
+2026-08-13T19:56:39.826+03:30 I (184) octal_psram: Latency      : 0x01 (Fixed)
+2026-08-13T19:56:39.826+03:30 I (188) octal_psram: VCC          : 0x01 (3V)
+2026-08-13T19:56:39.826+03:30 I (192) octal_psram: SRF          : 0x01 (Fast Refresh)
+2026-08-13T19:56:39.826+03:30 I (197) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+2026-08-13T19:56:39.826+03:30 I (202) octal_psram: BurstLen     : 0x01 (32 Byte)
+2026-08-13T19:56:39.826+03:30 I (207) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+2026-08-13T19:56:39.826+03:30 I (212) octal_psram: DriveStrength: 0x00 (1/1)
+2026-08-13T19:56:39.826+03:30 I (217) MSPI Timing: PSRAM timing tuning index: 5
+2026-08-13T19:56:39.826+03:30 I (221) esp_psram: Found 8MB PSRAM device
+2026-08-13T19:56:39.826+03:30 I (224) esp_psram: Speed: 80MHz
+2026-08-13T19:56:39.826+03:30 I (227) cpu_start: Multicore app
+2026-08-13T19:56:40.562+03:30 I (663) esp_psram: SPI SRAM memory test OK
+2026-08-13T19:56:40.562+03:30 I (671) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+2026-08-13T19:56:40.562+03:30 I (672) cpu_start: Pro cpu start user code
+2026-08-13T19:56:40.562+03:30 I (672) cpu_start: cpu freq: 160000000 Hz
+2026-08-13T19:56:40.562+03:30 I (673) app_init: Application information:
+2026-08-13T19:56:40.562+03:30 I (677) app_init: Project name:     shahbaz_sensor_usb_node
+2026-08-13T19:56:40.562+03:30 I (682) app_init: App version:      1
+2026-08-13T19:56:40.562+03:30 I (686) app_init: Compile time:     Aug 13 2026 19:53:50
+2026-08-13T19:56:40.562+03:30 I (691) app_init: ELF file SHA256:  f60b7e5cb...
+2026-08-13T19:56:40.562+03:30 I (695) app_init: ESP-IDF:          v5.4.4
+2026-08-13T19:56:40.562+03:30 I (699) efuse_init: Min chip rev:     v0.0
+2026-08-13T19:56:40.562+03:30 I (703) efuse_init: Max chip rev:     v0.99 
+2026-08-13T19:56:40.563+03:30 I (707) efuse_init: Chip rev:         v0.2
+2026-08-13T19:56:40.563+03:30 I (711) heap_init: Initializing. RAM available for dynamic allocation:
+2026-08-13T19:56:40.563+03:30 I (717) heap_init: At 3FC9C298 len 0004D478 (309 KiB): RAM
+2026-08-13T19:56:40.563+03:30 I (722) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+2026-08-13T19:56:40.563+03:30 I (727) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+2026-08-13T19:56:40.563+03:30 I (732) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+2026-08-13T19:56:40.563+03:30 I (738) esp_psram: Adding pool of 8192K of PSRAM memory to heap allocator
+2026-08-13T19:56:40.563+03:30 I (745) spi_flash: detected chip: boya
+2026-08-13T19:56:40.563+03:30 I (748) spi_flash: flash io: qio
+2026-08-13T19:56:40.563+03:30 I (751) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+2026-08-13T19:56:40.563+03:30 I (757) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+2026-08-13T19:56:40.563+03:30 I (764) main_task: Started on CPU0
+2026-08-13T19:56:40.563+03:30 I (788) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+2026-08-13T19:56:40.563+03:30 I (788) main_task: Calling app_main()
+2026-08-13T19:56:40.563+03:30 I (789) shahbaz: boot: flash=16777216 bytes psram=8388608 bytes issues=0x00002ff0
+2026-08-13T19:56:40.563+03:30 W (795) shahbaz: exact board revision evidence is not recorded; revision-specific GPIOs stay unused
+2026-08-13T19:56:40.563+03:30 W (804) shahbaz: physical N16R8 module marking evidence is not recorded
+2026-08-13T19:56:40.563+03:30 W (810) shahbaz: native USB connector routing evidence is not recorded; use the connector wired to GPIO19/GPIO20
+2026-08-13T19:56:40.563+03:30 W (820) shahbaz: exact board 5V/VIN power path is unverified
+2026-08-13T19:56:40.563+03:30 W (826) shahbaz: USB VBUS isolation is unverified; do not combine USB host power with external power until verified
+2026-08-13T19:56:40.563+03:30 W (836) shahbaz: USB reverse-current/backfeed measurements are unverified
+2026-08-13T19:56:40.563+03:30 W (842) shahbaz: USB enumeration with the reviewed VBUS isolation arrangement is unverified
+2026-08-13T19:56:40.563+03:30 W (850) shahbaz: consolidated USB/power evidence record is missing
+2026-08-13T19:56:40.563+03:30 W (856) shahbaz: sensor wiring evidence is not recorded; runtime I2C diagnostics will determine availability
+2026-08-13T19:56:40.563+03:30 I (866) shahbaz: PWM actuators excluded from this production image; sensor/USB functions remain active
+2026-08-13T19:56:40.563+03:30 I (875) shahbaz: I2C ready: SDA=8 SCL=9 400kHz
+2026-08-13T19:56:40.564+03:30 W (879) tusb_desc: No Device descriptor provided, using default.
+2026-08-13T19:56:40.564+03:30 W (885) tusb_desc: No Full-speed configuration descriptor provided, using default.
+2026-08-13T19:56:40.564+03:30 W (892) tusb_desc: No String descriptors provided, using default.
+2026-08-13T19:56:40.564+03:30 I (898) tusb_desc: 
+2026-08-13T19:56:40.564+03:30 ┌─────────────────────────────────┐
+2026-08-13T19:56:40.564+03:30 │  USB Device Descriptor Summary  │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┬─────────────┤
+2026-08-13T19:56:40.564+03:30 │bDeviceClass       │ 239         │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │bDeviceSubClass    │ 2           │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │bDeviceProtocol    │ 1           │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │bMaxPacketSize0    │ 64          │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │idVendor           │ 0x303a      │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │idProduct          │ 0x4001      │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │bcdDevice          │ 0x100       │
+2026-08-13T19:56:40.564+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.564+03:30 │iManufacturer      │ 0x1         │
+2026-08-13T19:56:40.724+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.724+03:30 │iProduct           │ 0x2         │
+2026-08-13T19:56:40.725+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.725+03:30 │iSerialNumber      │ 0x3         │
+2026-08-13T19:56:40.725+03:30 ├───────────────────┼─────────────┤
+2026-08-13T19:56:40.725+03:30 │bNumConfigurations │ 0x1         │
+2026-08-13T19:56:40.725+03:30 └───────────────────┴─────────────┘
+2026-08-13T19:56:40.725+03:30 I (1065) TinyUSB: TinyUSB Driver installed on port 0
+2026-08-13T19:56:40.725+03:30 I (1070) shahbaz: native USB CDC initialization: ready
+2026-08-13T19:56:40.725+03:30 I (1075) shahbaz: app_main subscribed to ESP task watchdog
+2026-08-13T19:56:40.725+03:30 I (1094) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:40.725+03:30 I (1094) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:40.725+03:30 I (1125) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:40.725+03:30 I (1125) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:41.764+03:30 I (2136) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:41.765+03:30 I (2136) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:41.765+03:30 I (2167) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:41.765+03:30 I (2167) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:42.815+03:30 I (3178) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:42.815+03:30 I (3178) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:42.815+03:30 I (3209) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:42.815+03:30 I (3209) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:43.848+03:30 I (4220) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:43.848+03:30 I (4220) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:43.848+03:30 I (4251) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:43.848+03:30 I (4251) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:44.886+03:30 I (5262) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:44.886+03:30 I (5262) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:44.886+03:30 I (5293) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:44.886+03:30 I (5293) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:45.679+03:30 I (6081) shahbaz: state=1 usb=0 telemetry=0 SHT30=offline(err=3 i2c=4 fail=15 crc=0) MS5611=offline(err=3 i2c=5 fail=15 crc=0) rx=0 rx_drop=0 tx_drop=0 session_reject=0 stale_reject=0
+2026-08-13T19:56:45.930+03:30 I (6304) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:45.930+03:30 I (6304) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:45.931+03:30 I (6335) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:45.931+03:30 I (6335) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:46.976+03:30 I (7346) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:46.976+03:30 I (7346) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:46.976+03:30 I (7377) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:46.976+03:30 I (7377) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:48.010+03:30 I (8388) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:48.010+03:30 I (8388) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:48.010+03:30 I (8419) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:48.010+03:30 I (8419) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:49.063+03:30 I (9430) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:49.064+03:30 I (9430) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:49.064+03:30 I (9461) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:49.064+03:30 I (9461) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:50.089+03:30 I (10472) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:50.090+03:30 I (10472) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:50.090+03:30 I (10503) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:50.090+03:30 I (10503) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:50.680+03:30 I (11081) shahbaz: state=1 usb=0 telemetry=0 SHT30=offline(err=3 i2c=4 fail=30 crc=0) MS5611=offline(err=3 i2c=5 fail=30 crc=0) rx=0 rx_drop=0 tx_drop=0 session_reject=0 stale_reject=0
+2026-08-13T19:56:51.146+03:30 I (11514) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:51.146+03:30 I (11514) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:51.146+03:30 I (11545) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:51.146+03:30 I (11545) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:52.180+03:30 I (12556) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:52.180+03:30 I (12556) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:52.180+03:30 I (12587) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:52.180+03:30 I (12587) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:53.229+03:30 I (13598) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:53.229+03:30 I (13598) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:53.229+03:30 I (13629) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:53.230+03:30 I (13629) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:54.263+03:30 I (14640) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:54.263+03:30 I (14640) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:54.263+03:30 I (14671) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:54.263+03:30 I (14671) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:55.313+03:30 I (15682) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:55.313+03:30 I (15682) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:55.313+03:30 I (15713) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:55.313+03:30 I (15713) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:55.678+03:30 I (16081) shahbaz: state=1 usb=0 telemetry=0 SHT30=offline(err=3 i2c=4 fail=45 crc=0) MS5611=offline(err=3 i2c=5 fail=45 crc=0) rx=0 rx_drop=0 tx_drop=0 session_reject=0 stale_reject=0
+2026-08-13T19:56:56.362+03:30 I (16724) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:56.362+03:30 I (16724) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:56.362+03:30 I (16755) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:56.362+03:30 I (16755) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:57.388+03:30 I (17766) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:57.388+03:30 I (17766) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:57.388+03:30 I (17797) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:57.388+03:30 I (17797) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:58.438+03:30 I (18808) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:58.438+03:30 I (18808) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:58.438+03:30 I (18839) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:58.438+03:30 I (18839) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:59.471+03:30 I (19850) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:59.471+03:30 I (19850) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:59.471+03:30 I (19881) gpio: GPIO[8]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 
+2026-08-13T19:56:59.471+03:30 I (19881) gpio: GPIO[9]| InputEn: 1| OutputEn: 1| OpenDrain: 1| Pullup: 1| Pulldown: 0| Intr:0 

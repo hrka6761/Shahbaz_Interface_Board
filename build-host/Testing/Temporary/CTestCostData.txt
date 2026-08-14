@@ -1,0 +1,15 @@
+domain_measurement_test 1 0.164948
+board_profile_test 1 0.153021
+espidf_i2c_error_mapping_test 1 0.175325
+fixed_priority_queue_test 1 0.120128
+task_health_monitor_test 1 0.409221
+sensor_sht30_domain_test 1 0.368231
+sensor_ms5611_domain_test 1 0.282044
+sensor_scheduler_test 1 0.207263
+telemetry_protocol_test 1 0.178326
+safety_supervisor_test 1 0.130191
+null_actuator_test 1 0.335932
+command_dispatcher_test 1 0.291601
+pwm_math_test 1 0.230194
+device_link_test 1 0.217375
+---

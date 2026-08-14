@@ -1,0 +1,18 @@
+connection_id,source_component,source_pin_label,source_gpio_or_net,destination_component,destination_pin_label,signal_name,voltage_domain,direction,requirement,verification_status,notes
+W001,main_esp32,3V3,3V3,sht30_ambient,VCC,SHT30_3V3,3.3V,power,required,PROJECT_CONFIGURATION,Power SHT30 from 3.3 V only
+W002,main_esp32,GND,GND,sht30_ambient,GND,COMMON_GND,0V,power,required,PROJECT_CONFIGURATION,Short common ground
+W003,main_esp32,GPIO8,GPIO8,sht30_ambient,SDA,I2C_SDA,3.3V,bidirectional,required,PROJECT_CONFIGURATION,Shared with GY-63
+W004,main_esp32,GPIO9,GPIO9,sht30_ambient,SCL,I2C_SCL,3.3V,output_clock,required,PROJECT_CONFIGURATION,Shared with GY-63
+W005,main_esp32,3V3,3V3,ms5611_baro,VCC,GY63_3V3,3.3V,power,required,PROJECT_CONFIGURATION,Project-required 3.3 V supply; verify actual module circuitry before energizing
+W006,main_esp32,GND,GND,ms5611_baro,GND,COMMON_GND,0V,power,required,PROJECT_CONFIGURATION,Short common ground
+W007,main_esp32,GPIO9,GPIO9,ms5611_baro,SCL,I2C_SCL,3.3V,output_clock,required,PROJECT_CONFIGURATION,Shared with SHT30
+W008,main_esp32,GPIO8,GPIO8,ms5611_baro,SDA,I2C_SDA,3.3V,bidirectional,required,PROJECT_CONFIGURATION,Shared with SHT30
+W009,main_esp32,GND,GND,ms5611_baro,CSB,MS5611_CSB_LOW,0V,strap_input,required,PROJECT_CONFIGURATION,Selects address 0x77; must not float
+W010,none,NC,NC,ms5611_baro,SDO,MS5611_SDO_NC,N/A,not_connected,required,PROJECT_CONFIGURATION,Unused in I2C mode
+W011,main_esp32,3V3,3V3,ms5611_baro,PS,MS5611_PS_HIGH,3.3V,strap_input,required,PROJECT_CONFIGURATION,Selects I2C mode
+W012,usb_host,USB D-,USB_D_MINUS,main_esp32,GPIO19,USB_D_MINUS,USB,bidirectional,required,CANDIDATE_REFERENCE,Native USB data path on the official YD-ESP32-S3 reference design: GPIO19 is USB D-; visually confirm the physical board matches the reference design
+W013,usb_host,USB D+,USB_D_PLUS,main_esp32,GPIO20,USB_D_PLUS,USB,bidirectional,required,CANDIDATE_REFERENCE,Native USB data path on the official YD-ESP32-S3 reference design: GPIO20 is USB D+; visually confirm the physical board matches the reference design
+W014,battery_5v,POSITIVE,BATTERY_5V,main_esp32,5V/VIN_INPUT_TO_BE_VERIFIED,SYSTEM_5V,5V,power,required,PROJECT_CONFIGURATION,Sole operating power source requirement; exact input point polarity regulator path and rating remain UNVERIFIED
+W015,battery_5v,NEGATIVE,BATTERY_GND,main_esp32,GND,COMMON_GND,0V,ground,required,PROJECT_CONFIGURATION,"Battery ground, board ground, sensors, and USB signal ground share the required reference"
+W016,usb_host,USB VBUS,VBUS,required_vbus_isolation_boundary,NO_POWER_PATH,USB_VBUS_BLOCKED,5V nominal,blocked_power_path,required,PROJECT_CONFIGURATION,Project power-isolation requirement for USB-host operation; exact implementation and reverse-current behavior remain UNVERIFIED
+W017,usb_host,USB GND,USB_GND,main_esp32,GND,USB_SIGNAL_GND,0V,ground_reference,required,PROJECT_CONFIGURATION,USB signal ground reference shared with board ground; operational host is the Android phone running Shahbaz; Windows is permitted only for development/HIL diagnostics

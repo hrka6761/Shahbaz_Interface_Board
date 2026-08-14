@@ -1,0 +1,61 @@
+menu "Shahbaz PWM actuators"
+config SHAHBAZ_ACTUATOR_PINS_PHYSICALLY_REVIEWED
+    bool "Actuator GPIO assignments physically reviewed on the exact board"
+    default n
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+    help
+        Required fail-closed authorization for physical PWM initialization.
+        The configured GPIOs must be available-with-review, unique, and backed
+        by a nonempty evidence record ID.
+
+config SHAHBAZ_ACTUATOR_EVIDENCE_RECORD_ID
+    string "Actuator GPIO review evidence record ID"
+    default ""
+    depends on SHAHBAZ_ACTUATOR_PINS_PHYSICALLY_REVIEWED
+    help
+        Identifier of the exact-board actuator GPIO review record. A blank
+        value never authorizes physical PWM initialization.
+
+config SHAHBAZ_MOTOR_PWM_HZ
+    int "Motor ESC PWM frequency (Hz)"
+    default 400
+    range 50 500
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+
+config SHAHBAZ_SERVO_PWM_HZ
+    int "Servo PWM frequency (Hz)"
+    default 50
+    range 40 400
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+
+config SHAHBAZ_MOTOR0_GPIO
+    int "Motor 0 PWM GPIO"
+    default 4
+    range 0 48
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+config SHAHBAZ_MOTOR1_GPIO
+    int "Motor 1 PWM GPIO"
+    default 5
+    range 0 48
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+config SHAHBAZ_MOTOR2_GPIO
+    int "Motor 2 PWM GPIO"
+    default 6
+    range 0 48
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+config SHAHBAZ_MOTOR3_GPIO
+    int "Motor 3 PWM GPIO"
+    default 7
+    range 0 48
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+config SHAHBAZ_SERVO0_GPIO
+    int "Servo 0 PWM GPIO"
+    default 10
+    range 0 48
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+config SHAHBAZ_SERVO1_GPIO
+    int "Servo 1 PWM GPIO"
+    default 11
+    range 0 48
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+endmenu

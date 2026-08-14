@@ -1,0 +1,44 @@
+# ESP32-S3 N16R8 project defaults. These require validation against the selected
+# ESP-IDF release before they are accepted as a successful target build.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_BOOT_INIT=y
+# Shahbaz native USB CDC-ACM transport (development VID/PID from Espressif TinyUSB defaults).
+CONFIG_SHAHBAZ_ENABLE_NATIVE_USB_TRANSPORT=y
+CONFIG_TINYUSB_CDC_ENABLED=y
+CONFIG_TINYUSB_CDC_COUNT=1
+CONFIG_TINYUSB_CDC_RX_BUFSIZE=1024
+CONFIG_TINYUSB_CDC_TX_BUFSIZE=1024
+CONFIG_TINYUSB_CDC_EP_BUFSIZE=512
+CONFIG_TINYUSB_DESC_USE_ESPRESSIF_VID=y
+CONFIG_TINYUSB_DESC_USE_DEFAULT_PID=y
+CONFIG_TINYUSB_DESC_MANUFACTURER_STRING="Shahbaz"
+CONFIG_TINYUSB_DESC_PRODUCT_STRING="Shahbaz ESP32-S3 Sensor Bridge"
+CONFIG_TINYUSB_DESC_SERIAL_STRING="SHAHBAZ-S3-N16R8"
+CONFIG_TINYUSB_DESC_CDC_STRING="Shahbaz CDC"
+
+# Actuator hardware is implemented but deliberately off in the safe bench default.
+CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n
+
+# Reviewed production link-safety policy. Android and Windows HIL send a
+# heartbeat every 350 ms; this permits bounded scheduling/USB jitter while
+# still forcing the fail-safe state within 1 s of heartbeat loss. The reusable
+# component's Kconfig fallback remains the fail-closed 0 ms value.
+CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS=1000
+
+# Independent runtime stall protection. app_main explicitly subscribes and feeds
+# the task watchdog; a stalled service loop triggers panic/reset to return PWM
+# peripherals to reset-safe state.
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_INIT=y
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=2
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=y
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1=y
+CONFIG_FREERTOS_HZ=1000

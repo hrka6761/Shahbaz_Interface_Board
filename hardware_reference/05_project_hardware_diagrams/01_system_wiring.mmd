@@ -1,0 +1,21 @@
+%% Operational product path is Android + Shahbaz. Windows is a separate development/HIL path.
+flowchart LR
+    APP[Shahbaz Android application]
+    ANDROID[Android phone<br/>operational USB Host]
+    WIN[Windows PC<br/>development / HIL only]
+    NATIVE[YD-ESP32-S3 native USB Type-C<br/>official design: GPIO19 D- / GPIO20 D+<br/>physical-board identity still UNVERIFIED]
+    ESP[shahbaz_interface_board<br/>ESP32-S3-WROOM-1-N16R8<br/>USB Device / sensor controller<br/>fail-safe supervised]
+    SHT[SHT3X-DIS 4-pin I2C breakout<br/>project photo available<br/>breakout manufacturer UNVERIFIED]
+    BARO[GY-63 MS5611 I2C breakout<br/>project photo available<br/>breakout manufacturer UNVERIFIED]
+    ACT[Actuator layer implemented<br/>default disabled for this bench phase]
+    PWR[Project bench wiring: 3.3 V to both modules<br/>common GND]
+
+    APP <--> ANDROID
+    ANDROID <--> NATIVE
+    WIN -. development HIL .-> NATIVE
+    NATIVE <--> ESP
+    ESP <-->|I2C SDA GPIO8<br/>I2C SCL GPIO9| SHT
+    ESP <-->|I2C SDA GPIO8<br/>I2C SCL GPIO9<br/>PS HIGH / CSB LOW| BARO
+    PWR --> SHT
+    PWR --> BARO
+    ESP --> ACT

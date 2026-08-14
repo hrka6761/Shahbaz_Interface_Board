@@ -1,0 +1,16 @@
+%% Official YD-ESP32-S3 reference design has two different Type-C connectors.
+flowchart LR
+    APP[Shahbaz Android application]
+    ANDROID[Android phone<br/>operational USB Host]
+    WIN[Windows PC<br/>development HIL only]
+    NATIVE[Native ESP32-S3 USB Type-C<br/>official YD design<br/>GPIO19 D- / GPIO20 D+<br/>Shahbaz operational data link]
+    ESP[shahbaz_interface_board<br/>ESP32-S3-WROOM-1-N16R8<br/>physical PCB match UNVERIFIED]
+    UART[Separate USB-to-UART Type-C<br/>WCH CH343P<br/>programming / diagnostics]
+    DEVPC[Development PC]
+
+    APP <--> ANDROID
+    ANDROID <--> NATIVE
+    WIN -. HIL only .-> NATIVE
+    NATIVE <--> ESP
+    DEVPC <--> UART
+    UART <--> |UART0 GPIO43 / GPIO44| ESP

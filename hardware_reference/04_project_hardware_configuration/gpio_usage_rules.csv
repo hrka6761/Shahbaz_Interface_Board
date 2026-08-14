@@ -1,0 +1,29 @@
+gpio,classification,owner_or_reason,rule,verification_status
+0,SENSITIVE,BOOT/strapping,Avoid external circuits without review,OFFICIAL_DATASHEET
+3,SENSITIVE,Strapping,Avoid by default,OFFICIAL_DATASHEET
+8,ASSIGNED,I2C SDA,Project I2C data line,PROJECT_CONFIGURATION
+9,ASSIGNED,I2C SCL,Project I2C clock line,PROJECT_CONFIGURATION
+19,RESERVED,Native USB D-,Never assign to sensors or actuators,OFFICIAL_DATASHEET
+20,RESERVED,Native USB D+,Never assign to sensors or actuators,OFFICIAL_DATASHEET
+22,NONEXISTENT,No ESP32-S3 GPIO22,Reject every assignment,OFFICIAL_DATASHEET
+23,NONEXISTENT,No ESP32-S3 GPIO23,Reject every assignment,OFFICIAL_DATASHEET
+24,NONEXISTENT,No ESP32-S3 GPIO24,Reject every assignment,OFFICIAL_DATASHEET
+25,NONEXISTENT,No ESP32-S3 GPIO25,Reject every assignment,OFFICIAL_DATASHEET
+26,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+27,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+28,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+29,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+30,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+31,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+32,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+33,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+34,FORBIDDEN,WROOM SPI0/1 memory path,Not available as ordinary module or board I/O,OFFICIAL_DATASHEET
+35,FORBIDDEN,N16R8 octal PSRAM internal connection,Unavailable for external use on N16R8,OFFICIAL_DATASHEET
+36,FORBIDDEN,N16R8 octal PSRAM internal connection,Unavailable for external use on N16R8,OFFICIAL_DATASHEET
+37,FORBIDDEN,N16R8 octal PSRAM internal connection,Unavailable for external use on N16R8,OFFICIAL_DATASHEET
+38,AVAILABLE_WITH_REVIEW,YD-ESP32-S3 header GPIO,Available on official YD reference but review before assignment,CANDIDATE_REFERENCE
+43,RESERVED,UART0 TX and board TX indicator,Keep for console/programming by default,CANDIDATE_REFERENCE
+44,RESERVED,UART0 RX and board RX indicator,Keep for console/programming by default,CANDIDATE_REFERENCE
+45,SENSITIVE,Strapping,Avoid by default,OFFICIAL_DATASHEET
+46,SENSITIVE,Strapping/input limitations,Avoid by default,OFFICIAL_DATASHEET
+48,RESERVED,YD-ESP32-S3 onboard WS2812 RGB LED,Do not assign to another peripheral without intentional remapping,CANDIDATE_REFERENCE

@@ -1,0 +1,100 @@
+schema_version: 4
+photos:
+  - id: current_board_front
+    path: ../01_esp32_s3_n16r8_development_board/03_actual_project_board_photos/Current_ESP32-S3_N16R8_Board_Front.jpg
+    required_for: physical_board_identity_and_revision_confirmation
+    view: component_side
+    label_orientation: UNVERIFIED_MISSING_IMAGE
+    resolution_px:
+      width: null
+      height: null
+    sha256: null
+    present: false
+    status: UNVERIFIED
+    limitation: A photo of the exact physical board is still required to prove that it matches the VCC-GND Studio YD-ESP32-S3 reference design.
+  - id: current_board_back
+    path: ../01_esp32_s3_n16r8_development_board/03_actual_project_board_photos/Current_ESP32-S3_N16R8_Board_Back.jpg
+    required_for: physical_board_revision_and_power_path_confirmation
+    view: solder_side
+    label_orientation: UNVERIFIED_MISSING_IMAGE
+    resolution_px:
+      width: null
+      height: null
+    sha256: null
+    present: false
+    status: UNVERIFIED
+    limitation: Back-side image of the exact physical board is not available.
+  - id: official_yd_board_front
+    path: ../01_esp32_s3_n16r8_development_board/01_official_vcc_gnd_board_docs/VCC-GND_YD-ESP32-S3_Board_Front.png
+    required_for: official_board_layout_reference
+    view: official_manufacturer_board_front
+    label_orientation: manufacturer_image
+    resolution_px:
+      width: 1996
+      height: 1996
+    sha256: 6aac8261031c377ccc4cec417adc65d05714d0d777e63584f56831f55da29a44
+    present: true
+    status: CANDIDATE_REFERENCE
+    limitation: Manufacturer reference image; it does not by itself prove the identity of the physical board in hand.
+  - id: official_yd_hardware_overview
+    path: ../01_esp32_s3_n16r8_development_board/01_official_vcc_gnd_board_docs/VCC-GND_YD-ESP32-S3_Hardware_Overview.png
+    required_for: official_usb_port_and_n16r8_reference
+    view: official_manufacturer_hardware_overview
+    label_orientation: manufacturer_image
+    resolution_px:
+      width: 1949
+      height: 1949
+    sha256: ff9a2d8fc268c0983e5151396d34ebb2afcdfffa33dfe03e9f6dad76629c6d87
+    present: true
+    status: CANDIDATE_REFERENCE
+    limitation: Manufacturer reference image; exact physical PCB should still be visually matched.
+  - id: sht30_front
+    path: ../02_sht30_i2c_module/02_actual_project_module_photos/Project_SHT3X-DIS_I2C_Module_Front.jpg
+    required_for: sht30_module_pin_labels
+    view: component_side
+    label_orientation: pin_labels_read_top_to_bottom_as_stored
+    visible_pin_order_as_shown: [VCC, GND, SDA, SCL]
+    resolution_px:
+      width: 1500
+      height: 1500
+    sha256: 900b19dea8e1634634925ffc0c9e25fe24c58562e99f0c29229bb40b2d3738c1
+    present: true
+    status: USER_PHOTO
+    limitation: The photo proves breakout labels and visible parts only; the breakout manufacturer and exact internal schematic remain unknown.
+  - id: sht30_back
+    path: ../02_sht30_i2c_module/02_actual_project_module_photos/Project_SHT3X-DIS_I2C_Module_Back.jpg
+    required_for: breakout_trace_and_pullup_confirmation
+    view: solder_side
+    label_orientation: UNVERIFIED_MISSING_IMAGE
+    resolution_px:
+      width: null
+      height: null
+    sha256: null
+    present: false
+    status: UNVERIFIED
+    limitation: Back-side traces are not available for review.
+  - id: gy63_front
+    path: ../03_gy63_ms5611_i2c_module/02_actual_project_module_photos/Project_GY-63_MS5611_I2C_Module_Front.jpg
+    required_for: gy63_module_pin_labels
+    view: labeled_pin_side
+    label_orientation: pin_labels_read_top_to_bottom_as_stored
+    visible_pin_order_as_shown: [VCC, GND, SCL, SDA, CSB, SDO, PS]
+    resolution_px:
+      width: 455
+      height: 455
+    sha256: 08ed6d71238334c8e2cf2c9ec678d82be130c51b2769e5029f643a73e5990f92
+    present: true
+    status: USER_PHOTO
+    limitation: The photo proves breakout labels only; exact MS5611 marking, regulator, pull-ups and level shifting are not visible.
+  - id: gy63_back
+    path: ../03_gy63_ms5611_i2c_module/02_actual_project_module_photos/Project_GY-63_MS5611_I2C_Module_Back.jpg
+    required_for: sensor_marking_and_breakout_circuit_confirmation
+    view: opposite_component_side
+    label_orientation: UNVERIFIED_MISSING_IMAGE
+    resolution_px:
+      width: null
+      height: null
+    sha256: null
+    present: false
+    status: UNVERIFIED
+    limitation: Opposite-side image is not available.

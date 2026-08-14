@@ -1,0 +1,12 @@
+menu "Shahbaz production composition"
+
+config SHAHBAZ_ACTUATORS_ENABLE
+    bool
+    default n
+    help
+        This sensor/USB production profile is fail-closed and always uses the
+        null actuator implementation. A future actuator-capable build profile
+        must introduce an explicit production composition instead of changing
+        component requirements from a CONFIG value during early expansion.
+
+endmenu

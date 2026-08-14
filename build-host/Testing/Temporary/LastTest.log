@@ -1,0 +1,216 @@
+Start testing: Aug 13 19:50 Iran Standard Time
+----------------------------------------------------------
+1/14 Testing: domain_measurement_test
+1/14 Test: domain_measurement_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/domain_measurement_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"domain_measurement_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.16 sec
+----------------------------------------------------------
+Test Passed.
+"domain_measurement_test" end time: Aug 13 19:50 Iran Standard Time
+"domain_measurement_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/14 Testing: board_profile_test
+2/14 Test: board_profile_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/board_profile_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"board_profile_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.15 sec
+----------------------------------------------------------
+Test Passed.
+"board_profile_test" end time: Aug 13 19:50 Iran Standard Time
+"board_profile_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/14 Testing: espidf_i2c_error_mapping_test
+3/14 Test: espidf_i2c_error_mapping_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/espidf_i2c_error_mapping_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"espidf_i2c_error_mapping_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"espidf_i2c_error_mapping_test" end time: Aug 13 19:50 Iran Standard Time
+"espidf_i2c_error_mapping_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/14 Testing: fixed_priority_queue_test
+4/14 Test: fixed_priority_queue_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/fixed_priority_queue_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"fixed_priority_queue_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"fixed_priority_queue_test" end time: Aug 13 19:50 Iran Standard Time
+"fixed_priority_queue_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/14 Testing: task_health_monitor_test
+5/14 Test: task_health_monitor_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/task_health_monitor_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"task_health_monitor_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.41 sec
+----------------------------------------------------------
+Test Passed.
+"task_health_monitor_test" end time: Aug 13 19:50 Iran Standard Time
+"task_health_monitor_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/14 Testing: sensor_sht30_domain_test
+6/14 Test: sensor_sht30_domain_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/sensor_sht30_domain_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"sensor_sht30_domain_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+All SHT3x domain tests passed
+<end of output>
+Test time =   0.37 sec
+----------------------------------------------------------
+Test Passed.
+"sensor_sht30_domain_test" end time: Aug 13 19:50 Iran Standard Time
+"sensor_sht30_domain_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/14 Testing: sensor_ms5611_domain_test
+7/14 Test: sensor_ms5611_domain_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/sensor_ms5611_domain_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"sensor_ms5611_domain_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+All MS5611 domain tests passed
+<end of output>
+Test time =   0.28 sec
+----------------------------------------------------------
+Test Passed.
+"sensor_ms5611_domain_test" end time: Aug 13 19:50 Iran Standard Time
+"sensor_ms5611_domain_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/14 Testing: sensor_scheduler_test
+8/14 Test: sensor_scheduler_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/sensor_scheduler_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"sensor_scheduler_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+All sensor scheduler tests passed
+<end of output>
+Test time =   0.21 sec
+----------------------------------------------------------
+Test Passed.
+"sensor_scheduler_test" end time: Aug 13 19:50 Iran Standard Time
+"sensor_scheduler_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/14 Testing: telemetry_protocol_test
+9/14 Test: telemetry_protocol_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/telemetry_protocol_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"telemetry_protocol_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"telemetry_protocol_test" end time: Aug 13 19:50 Iran Standard Time
+"telemetry_protocol_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/14 Testing: safety_supervisor_test
+10/14 Test: safety_supervisor_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/safety_supervisor_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"safety_supervisor_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"safety_supervisor_test" end time: Aug 13 19:50 Iran Standard Time
+"safety_supervisor_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/14 Testing: null_actuator_test
+11/14 Test: null_actuator_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/null_actuator_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"null_actuator_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.34 sec
+----------------------------------------------------------
+Test Passed.
+"null_actuator_test" end time: Aug 13 19:50 Iran Standard Time
+"null_actuator_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/14 Testing: command_dispatcher_test
+12/14 Test: command_dispatcher_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/command_dispatcher_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"command_dispatcher_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.29 sec
+----------------------------------------------------------
+Test Passed.
+"command_dispatcher_test" end time: Aug 13 19:50 Iran Standard Time
+"command_dispatcher_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/14 Testing: pwm_math_test
+13/14 Test: pwm_math_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/pwm_math_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"pwm_math_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"pwm_math_test" end time: Aug 13 19:50 Iran Standard Time
+"pwm_math_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/14 Testing: device_link_test
+14/14 Test: device_link_test
+Command: "D:/Projects/Personal/Shahbaz board/build-host/device_link_test.exe"
+Directory: D:/Projects/Personal/Shahbaz board/build-host
+"device_link_test" start time: Aug 13 19:50 Iran Standard Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.22 sec
+----------------------------------------------------------
+Test Passed.
+"device_link_test" end time: Aug 13 19:50 Iran Standard Time
+"device_link_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 13 19:50 Iran Standard Time

@@ -1,0 +1,9 @@
+%% GPIO policy combines Espressif module restrictions, official YD board resources, and project assignments.
+flowchart TB
+    A[ASSIGNED - PROJECT_CONFIGURATION<br/>GPIO8 SDA<br/>GPIO9 SCL]
+    R[RESERVED<br/>GPIO19/20 native USB<br/>GPIO43/44 UART0 diagnostics<br/>GPIO48 YD onboard WS2812]
+    N[NONEXISTENT - OFFICIAL_DATASHEET<br/>GPIO22 / GPIO23 / GPIO24 / GPIO25]
+    F[FORBIDDEN - OFFICIAL_DATASHEET<br/>GPIO26-GPIO34 WROOM memory path<br/>GPIO35-GPIO37 N16R8 octal PSRAM]
+    V[AVAILABLE_WITH_REVIEW<br/>GPIO38 is exposed by official YD header map<br/>physical-board match remains UNVERIFIED]
+    S[SENSITIVE - OFFICIAL_DATASHEET<br/>GPIO0 / GPIO3 / GPIO45 / GPIO46]
+    U[NOT CLEARED<br/>Any new assignment requires SoC + N16R8 + YD board + project review]

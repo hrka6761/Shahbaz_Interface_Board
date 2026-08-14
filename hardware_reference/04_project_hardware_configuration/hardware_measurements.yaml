@@ -1,0 +1,66 @@
+schema_version: 3
+measurement_metadata:
+  evidence_record_id: null
+  measured_at_utc: null
+  operator: null
+  instrument_make_model: null
+  instrument_calibration_state: null
+  measurement_device_notes: null
+  status: UNVERIFIED
+project_requirements:
+  configured_source: regulated_5v_battery
+  nominal_source_voltage_v: 5.0
+  usb_vbus_continuity_to_board_power_requirement: OPEN_OR_CURRENT_BLOCKED
+  android_vbus_power_source_allowed: false
+  common_usb_signal_ground_required: true
+  status: PROJECT_CONFIGURATION
+sht30:
+  supply_voltage_v: null
+  sda_to_vcc_resistance_ohm_unpowered: null
+  scl_to_vcc_resistance_ohm_unpowered: null
+  onboard_pullups_confirmed: null
+  level_shifter_present: null
+  actual_i2c_address_7bit: null
+  status: UNVERIFIED
+gy63_ms5611:
+  supply_voltage_v: null
+  idle_sda_voltage_v: null
+  idle_scl_voltage_v: null
+  sda_to_vcc_resistance_ohm_unpowered: null
+  scl_to_vcc_resistance_ohm_unpowered: null
+  regulator_present: null
+  level_shifter_present: null
+  ps_idle_voltage_v: null
+  csb_idle_voltage_v: null
+  sdo_electrical_state: null
+  exact_sensor_top_marking: null
+  actual_i2c_address_7bit: null
+  prom_crc_passed_on_actual_hardware: null
+  status: UNVERIFIED
+shared_i2c_bus:
+  effective_sda_pullup_ohm: null
+  effective_scl_pullup_ohm: null
+  rise_time_ns_at_400khz: null
+  fall_time_ns_at_400khz: null
+  scope_capture_path: null
+  status: UNVERIFIED
+power_path:
+  measured_battery_voltage_no_load_v: null
+  measured_battery_voltage_under_load_v: null
+  verified_board_5v_or_vin_input_point: null
+  verified_input_polarity: null
+  sensor_3v3_rail_measured_v: null
+  usb_vbus_voltage_v: null
+  native_usb_connector_identity: null
+  usb_d_minus_continuity_to_gpio19_verified: null
+  usb_d_plus_continuity_to_gpio20_verified: null
+  usb_vbus_continuity_to_board_5v_rail_ohm: null
+  usb_vbus_isolation_method: null
+  usb_vbus_isolation_verified: null
+  usb_enumeration_with_vbus_blocked_verified: null
+  safe_vbus_sense_only_path_verified: null
+  common_usb_signal_ground_verified: null
+  reverse_current_from_battery_to_phone_ma: null
+  reverse_current_from_phone_to_battery_or_board_ma: null
+  brownout_behavior_observed: null
+  status: UNVERIFIED

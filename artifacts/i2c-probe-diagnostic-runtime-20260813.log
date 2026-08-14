@@ -1,0 +1,40 @@
+2026-08-13T19:45:01.719+03:30 ESP-ROM:esp32s3-20210327
+2026-08-13T19:45:01.719+03:30 Build:Mar 27 2021
+2026-08-13T19:45:01.719+03:30 rst:0x1 (POWERON),boot:0x8 (SPI_FAST_FLASH_BOOT)
+2026-08-13T19:45:01.719+03:30 SPIWP:0xee
+2026-08-13T19:45:01.720+03:30 mode:DIO, clock div:1
+2026-08-13T19:45:01.720+03:30 load:0x3fce2810,len:0x10e4
+2026-08-13T19:45:01.720+03:30 load:0x403c8700,len:0x4
+2026-08-13T19:45:01.720+03:30 load:0x403c8704,len:0xb30
+2026-08-13T19:45:01.720+03:30 load:0x403cb700,len:0x2cfc
+2026-08-13T19:45:01.720+03:30 entry 0x403c88a8
+2026-08-13T19:45:01.720+03:30 I (70) cpu_start: Multicore app
+2026-08-13T19:45:01.720+03:30 I (78) cpu_start: GPIO 44 and 43 are used as console UART I/O pins
+2026-08-13T19:45:01.720+03:30 I (79) cpu_start: Pro cpu start user code
+2026-08-13T19:45:01.720+03:30 I (79) cpu_start: cpu freq: 160000000 Hz
+2026-08-13T19:45:01.720+03:30 I (80) app_init: Application information:
+2026-08-13T19:45:01.720+03:30 I (84) app_init: Project name:     i2c_tools
+2026-08-13T19:45:01.720+03:30 I (88) app_init: App version:      1
+2026-08-13T19:45:01.720+03:30 I (91) app_init: Compile time:     Aug 13 2026 19:41:49
+2026-08-13T19:45:01.720+03:30 I (96) app_init: ELF file SHA256:  a8bc4b528...
+2026-08-13T19:45:01.720+03:30 I (100) app_init: ESP-IDF:          v5.4.4
+2026-08-13T19:45:01.720+03:30 I (104) efuse_init: Min chip rev:     v0.0
+2026-08-13T19:45:01.720+03:30 I (108) efuse_init: Max chip rev:     v0.99 
+2026-08-13T19:45:01.720+03:30 I (112) efuse_init: Chip rev:         v0.2
+2026-08-13T19:45:01.720+03:30 I (116) heap_init: Initializing. RAM available for dynamic allocation:
+2026-08-13T19:45:01.720+03:30 I (122) heap_init: At 3FC95B48 len 00053BC8 (334 KiB): RAM
+2026-08-13T19:45:01.720+03:30 I (127) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+2026-08-13T19:45:01.720+03:30 I (132) heap_init: At 3FCF0000 len 00008000 (32 KiB): DRAM
+2026-08-13T19:45:01.720+03:30 I (137) heap_init: At 600FE000 len 00001FE8 (7 KiB): RTCRAM
+2026-08-13T19:45:01.720+03:30 I (143) spi_flash: detected chip: boya
+2026-08-13T19:45:01.721+03:30 I (146) spi_flash: flash io: dio
+2026-08-13T19:45:01.721+03:30 W (149) spi_flash: Detected size(16384k) larger than the size in the binary image header(2048k). Using the size in the binary image header.
+2026-08-13T19:45:01.721+03:30 I (162) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+2026-08-13T19:45:01.721+03:30 I (168) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+2026-08-13T19:45:01.721+03:30 I (175) main_task: Started on CPU0
+2026-08-13T19:45:01.721+03:30 I (185) main_task: Calling app_main()
+2026-08-13T19:45:01.721+03:30 SHAHBAZ_I2C_PROBE_BEGIN sda=8 scl=9 frequency=100000 rounds=3
+2026-08-13T19:45:01.721+03:30 SHAHBAZ_I2C_PROBE_ROUND 1
+2026-08-13T19:45:01.979+03:30 SHAHBAZ_I2C_PROBE_ROUND 2
+2026-08-13T19:45:02.235+03:30 SHAHBAZ_I2C_PROBE_ROUND 3
+2026-08-13T19:45:02.501+03:30 SHAHBAZ_I2C_PROBE_END unique=0 timeouts=0 errors=0 expected44=0/3 expected77=0/3

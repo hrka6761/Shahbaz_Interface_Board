@@ -1,0 +1,113 @@
+menu "Shahbaz interface board safety profile"
+
+config SHAHBAZ_I2C_SDA_GPIO
+    int "Shared I2C SDA GPIO"
+    default 8
+    range 0 48
+    help
+        Project-configured default. The sensor drivers do not embed this pin.
+
+config SHAHBAZ_I2C_SCL_GPIO
+    int "Shared I2C SCL GPIO"
+    default 9
+    range 0 48
+
+config SHAHBAZ_ALT_I2C_PINS_PHYSICALLY_REVIEWED
+    bool "Alternate I2C pins physically reviewed on the exact board"
+    default n
+    help
+        GPIO8 SDA / GPIO9 SCL is the only pair accepted without this
+        attestation. Selecting any other otherwise-available pair requires an
+        exact-board header/routing review and a nonempty evidence record ID.
+
+config SHAHBAZ_ALT_I2C_EVIDENCE_RECORD_ID
+    string "Alternate I2C pin evidence record ID"
+    default ""
+    depends on SHAHBAZ_ALT_I2C_PINS_PHYSICALLY_REVIEWED
+    help
+        Identifier of the reviewed exact-board pin-routing record. A blank
+        value never authorizes alternate I2C pins.
+
+choice SHAHBAZ_BOARD_REVISION
+    prompt "Physically verified board revision"
+    default SHAHBAZ_BOARD_REVISION_UNVERIFIED
+
+config SHAHBAZ_BOARD_REVISION_UNVERIFIED
+    bool "UNVERIFIED (safe default)"
+
+config SHAHBAZ_BOARD_REVISION_YD_ESP32_S3_V1_4
+    bool "VCC-GND Studio YD-ESP32-S3 V1.4 reference design, physically verified"
+    help
+        Select only after the exact physical PCB has been matched to the
+        VCC-GND Studio YD-ESP32-S3 V1.4 schematic/layout evidence and an
+        evidence record ID has been entered below.
+
+endchoice
+
+config SHAHBAZ_BOARD_REVISION_EVIDENCE_RECORD_ID
+    string "Exact board revision evidence record ID"
+    default ""
+    help
+        A selected physical board revision is not accepted by runtime validation
+        unless this record identifier is nonempty.
+
+config SHAHBAZ_N16R8_MODULE_IDENTITY_VERIFIED
+    bool "Physical ESP32-S3-WROOM-1 N16R8 module marking verified"
+    default n
+    help
+        Runtime flash/PSRAM capacities do not prove the fitted module identity.
+        Enable only after recording a legible exact-module marking or equivalent
+        exact-board evidence.
+
+config SHAHBAZ_MODULE_IDENTITY_EVIDENCE_RECORD_ID
+    string "N16R8 module identity evidence record ID"
+    default ""
+    depends on SHAHBAZ_N16R8_MODULE_IDENTITY_VERIFIED
+
+config SHAHBAZ_SENSOR_HARDWARE_VERIFIED
+    bool "Sensor breakouts and shared I2C wiring physically verified"
+    default n
+
+config SHAHBAZ_SENSOR_EVIDENCE_RECORD_ID
+    string "Sensor hardware evidence record ID"
+    default ""
+    depends on SHAHBAZ_SENSOR_HARDWARE_VERIFIED
+
+config SHAHBAZ_NATIVE_USB_ROUTE_VERIFIED
+    bool "Native connector continuity to GPIO19/GPIO20 physically verified"
+    default n
+
+config SHAHBAZ_BOARD_POWER_PATH_VERIFIED
+    bool "Exact 5V/VIN input, polarity, regulator path, and loaded supply verified"
+    default n
+
+config SHAHBAZ_USB_VBUS_ISOLATION_VERIFIED
+    bool "USB VBUS isolation implementation physically verified"
+    default n
+
+config SHAHBAZ_USB_BIDIRECTIONAL_REVERSE_CURRENT_VERIFIED
+    bool "USB reverse-current/backfeed measured in both directions"
+    default n
+
+config SHAHBAZ_USB_ISOLATED_ENUMERATION_VERIFIED
+    bool "USB enumeration verified with the reviewed VBUS isolation arrangement"
+    default n
+
+config SHAHBAZ_USB_EVIDENCE_RECORD_ID
+    string "Consolidated USB/power evidence record ID"
+    default ""
+    help
+        Nonempty identifier for the reviewed record covering the exact power
+        path, connector continuity, isolation, bidirectional reverse current,
+        and isolated enumeration. It must match the evidence manifests.
+
+config SHAHBAZ_ENABLE_NATIVE_USB_TRANSPORT
+    bool "Enable native USB CDC transport"
+    default y
+    help
+        Enables the ESP32-S3 USB-OTG CDC-ACM data link on the native USB pins
+        GPIO19 (D-) and GPIO20 (D+). Physical power/backfeed verification is
+        still recommended before connecting USB while the aircraft is powered
+        from another source. Actuators remain independently disabled by default.
+
+endmenu

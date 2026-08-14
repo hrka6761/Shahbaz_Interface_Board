@@ -1,0 +1,195 @@
+schema_version: 4
+project: esp32s3_drone_sensor_usb_phase
+verification_policy:
+  allowed_statuses:
+    - VERIFIED_MEASUREMENT
+    - USER_PHOTO
+    - OFFICIAL_DATASHEET
+    - PROJECT_CONFIGURATION
+    - CANDIDATE_REFERENCE
+    - UNVERIFIED
+  physical_claims_require_actual_hardware_evidence: true
+board:
+  id: main_esp32
+  development_board_target: VCC-GND Studio YD-ESP32-S3 with ESP32-S3-WROOM-1-N16R8
+  development_board_family_description: YD-ESP32-S3 dual-USB-C development board
+  exact_manufacturer: null
+  exact_manufacturer_status: UNVERIFIED
+  candidate_board_manufacturer: VCC-GND Studio
+  candidate_board_manufacturer_status: CANDIDATE_REFERENCE
+  pcb_revision: null
+  pcb_revision_status: UNVERIFIED
+  candidate_reference_revision: V1.4 design reference
+  candidate_reference_revision_status: CANDIDATE_REFERENCE
+  module_profile: N16R8
+  module_profile_status: PROJECT_CONFIGURATION
+  exact_module_marking: null
+  exact_module_marking_status: UNVERIFIED
+  expected_module_marking: ESP32-S3-WROOM-1-N16R8
+  expected_module_marking_status: PROJECT_CONFIGURATION
+  board_identity_evidence_record_id: null
+  flash_mb: 16
+  psram_mb: 8
+  module_memory_profile_status: OFFICIAL_DATASHEET
+  gpio_logic_v: 3.3
+  gpio_logic_status: OFFICIAL_DATASHEET
+  nonexistent_soc_gpios: [22, 23, 24, 25]
+  nonexistent_soc_gpios_status: OFFICIAL_DATASHEET
+  internal_memory_path_gpios: [26, 27, 28, 29, 30, 31, 32, 33, 34]
+  internal_memory_path_gpios_reason: SPI0/1 flash and PSRAM path; not ordinary WROOM module I/O
+  internal_memory_path_gpios_status: OFFICIAL_DATASHEET
+  unavailable_module_gpios: [35, 36, 37]
+  unavailable_module_gpios_reason: N16R8 octal PSRAM internal connection
+  unavailable_module_gpios_status: OFFICIAL_DATASHEET
+  usb_ports:
+    native_usb_otg:
+      intended_role: USB Device connected operationally to Android phone running Shahbaz application; Windows allowed only as development HIL host
+      intended_role_status: PROJECT_CONFIGURATION
+      operational_host: Android phone running Shahbaz application
+      development_validation_host: Windows PC running Shahbaz HIL
+      product_component_name: shahbaz_interface_board
+      physical_description: YD-ESP32-S3 direct ESP32-S3 USB Type-C port
+      d_minus_gpio: 19
+      d_plus_gpio: 20
+      gpio_mapping_status: OFFICIAL_DATASHEET
+      connector_identity: null
+      connector_identity_status: UNVERIFIED
+      reference_design_connector: Direct USB OTG Type-C connector on YD-ESP32-S3
+      reference_design_connector_status: CANDIDATE_REFERENCE
+      exact_board_trace_path: null
+      exact_board_trace_path_status: UNVERIFIED
+      reference_design_trace_path: Native USB connector routes USB D- to GPIO19 and USB D+ to GPIO20 in official YD reference design
+      reference_design_trace_path_status: CANDIDATE_REFERENCE
+      evidence_record_id: null
+    usb_uart_bridge:
+      physical_description: Separate USB-to-UART Type-C connector using WCH CH343P
+      android_connection_allowed: false
+      uart_tx_gpio: 43
+      uart_rx_gpio: 44
+      gpio_reservation_status: CANDIDATE_REFERENCE
+      connector_present: true
+      connector_presence_status: CANDIDATE_REFERENCE
+      exact_board_trace_path_status: CANDIDATE_REFERENCE
+  i2c:
+    sda_gpio: 8
+    scl_gpio: 9
+    target_frequency_hz: 400000
+    voltage_v: 3.3
+    status: PROJECT_CONFIGURATION
+    target_frequency_electrically_verified: null
+    target_frequency_electrical_status: UNVERIFIED
+    evidence_record_id: null
+  onboard_resources:
+    rgb_led:
+      mapping_policy: YD_ESP32_S3_OFFICIAL_REFERENCE
+      selected_gpio: null
+      selected_gpio_status: UNVERIFIED
+      applicability_to_current_board_status: UNVERIFIED
+      reference_board_gpio: 48
+      reference_board_gpio_status: CANDIDATE_REFERENCE
+      reference_source: VCC-GND Studio YD-ESP32-S3 official repository
+      evidence_record_id: null
+      policy_when_board_identity_unverified: KEEP_GPIO48_RESERVED
+      policy_status: PROJECT_CONFIGURATION
+    separate_status_led_assumed: false
+    separate_status_led_status: PROJECT_CONFIGURATION
+  sensitive_pins: [0, 3, 45, 46]
+  sensitive_pins_status: OFFICIAL_DATASHEET
+sensors:
+  - id: sht30_ambient
+    project_module_target: Generic SHT3X-DIS four-pin I2C breakout populated with an SHT30-family sensor
+    project_module_target_status: PROJECT_CONFIGURATION
+    breakout_manufacturer: null
+    breakout_manufacturer_status: UNVERIFIED
+    visible_module_label: SHT3X-DIS
+    visible_module_label_status: USER_PHOTO
+    expected_sensor: SHT30-DIS
+    expected_sensor_status: PROJECT_CONFIGURATION
+    exact_installed_sensor_variant: null
+    exact_installed_sensor_variant_status: UNVERIFIED
+    interface: I2C
+    supported_addresses_7bit: ['0x44', '0x45']
+    configured_address_7bit: '0x44'
+    configured_address_status: PROJECT_CONFIGURATION
+    protocol_reference_status: OFFICIAL_DATASHEET
+    configured_supply_v: 3.3
+    configured_supply_status: PROJECT_CONFIGURATION
+    physical_pin_order_top_to_bottom: [VCC, GND, SDA, SCL]
+    physical_pin_order_status: USER_PHOTO
+    actual_address_7bit: null
+    actual_address_status: UNVERIFIED
+    evidence_record_id: null
+    breakout_pullups_status: USER_PHOTO
+    breakout_level_shifter_status: UNVERIFIED
+    status: UNVERIFIED
+  - id: ms5611_baro
+    project_module_target: Generic GY-63 breakout expected to contain MS5611-01BA03
+    project_module_target_status: PROJECT_CONFIGURATION
+    breakout_manufacturer: null
+    breakout_manufacturer_status: UNVERIFIED
+    visible_module_label: GY-63
+    visible_module_label_status: USER_PHOTO
+    expected_sensor: MS5611-01BA03
+    expected_sensor_status: PROJECT_CONFIGURATION
+    exact_sensor_marking: null
+    exact_sensor_marking_status: UNVERIFIED
+    interface: I2C
+    supported_addresses_7bit: ['0x76', '0x77']
+    configured_address_7bit: '0x77'
+    configured_address_status: PROJECT_CONFIGURATION
+    protocol_reference_status: OFFICIAL_DATASHEET
+    configured_supply_v: 3.3
+    configured_supply_status: PROJECT_CONFIGURATION
+    physical_pin_order_top_to_bottom: [VCC, GND, SCL, SDA, CSB, SDO, PS]
+    physical_pin_order_status: USER_PHOTO
+    configured_ps_state: HIGH
+    configured_csb_state: LOW
+    configured_sdo_state: NC
+    strap_configuration_status: PROJECT_CONFIGURATION
+    actual_ps_state: null
+    actual_csb_state: null
+    actual_sdo_state: null
+    actual_strap_state_status: UNVERIFIED
+    actual_address_7bit: null
+    actual_address_status: UNVERIFIED
+    evidence_record_id: null
+    breakout_regulator_status: UNVERIFIED
+    breakout_pullups_status: UNVERIFIED
+    breakout_level_shifter_status: UNVERIFIED
+    status: UNVERIFIED
+power:
+  source_type: regulated_5v_battery
+  nominal_source_voltage_v: 5.0
+  sole_operating_power_source: true
+  board_power_input_requirement: Use only a verified 5V input path on the exact board
+  sensors_powered_from_board_3v3: true
+  direct_5v_to_sensor_vcc_allowed: false
+  android_is_usb_host: true
+  android_usb_data_only: true
+  android_vbus_must_not_power_board_or_sensors: true
+  android_vbus_connection_to_battery_rail_allowed: false
+  vbus_current_blocking_required: true
+  safe_vbus_sense_path_may_be_required_for_enumeration: true
+  common_usb_signal_ground_required: true
+  yd_specific_in_out_or_usb_otg_jumper_assumptions_allowed: false
+  board_specific_power_selector_must_be_verified_if_present: true
+  configuration_status: PROJECT_CONFIGURATION
+  battery_output_under_load_status: UNVERIFIED
+  exact_board_5v_input_path_status: UNVERIFIED
+  exact_vbus_isolation_implementation_status: UNVERIFIED
+  usb_enumeration_with_vbus_isolation_status: UNVERIFIED
+  reverse_current_status: UNVERIFIED
+  usb_evidence_record_id: null
+safety:
+  phase_state: DISARMED
+  arming_supported: false
+  actuator_commands_accepted: false
+  physical_waveform_outputs_allowed: false
+  context: Safe default bench configuration for the sensor and USB validation phase
+  status: PROJECT_CONFIGURATION
+actuators:
+  controller: NullActuatorController
+  physical_outputs_enabled: false
+  output_peripherals_initialized: false
+  context: Default bench build keeps CONFIG_SHAHBAZ_ACTUATORS_ENABLE disabled; real actuator implementation exists separately
+  status: PROJECT_CONFIGURATION

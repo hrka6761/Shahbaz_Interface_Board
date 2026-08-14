@@ -1,0 +1,26 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260813194338
+Username: DESKTOP-FTDFS3S\CodexSandboxOffline
+RunAs User: DESKTOP-FTDFS3S\CodexSandboxOffline
+Configuration Name: 
+Machine: DESKTOP-FTDFS3S (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -Command try { [Console]::OutputEncoding=[System.Text.Encoding]::UTF8 } catch {}
+$ErrorActionPreference='Stop'; $fw='D:\Projects\Personal\Shahbaz board'; $idf=Join-Path $fw '.tooling\esp-idf-5.4.4'; $py='C:\Espressif\python_env\idf5.4_py3.11_env\Scripts\python.exe'; $diag='C:\Users\HAMIDREZA\AppData\Local\Temp\shahbaz-i2c-tools-20260813T1938'; $env:IDF_PATH=$idf; $env:IDF_TOOLS_PATH='C:\Espressif'; $env:IDF_PYTHON_ENV_PATH='C:\Espressif\python_env\idf5.4_py3.11_env'; $env:ESP_ROM_ELF_DIR='C:\Espressif\tools\esp-rom-elfs\20241011'; $env:PATH='C:\Espressif\python_env\idf5.4_py3.11_env\Scripts;C:\Espressif\tools\xtensa-esp-elf\esp-14.2.0_20260121\xtensa-esp-elf\bin;C:\Tools\winlibs-gcc-16.2.0\mingw64\bin;' + $env:PATH; $log=Join-Path $fw 'artifacts\i2c-probe-diagnostic-build-20260813.log'; Start-Transcript -LiteralPath $log -Force; try { Push-Location $diag; & $py (Join-Path $idf 'tools\idf.py') reconfigure; if ($LASTEXITCODE -ne 0) { throw 'Diagnostic reconfigure failed' }; & $py (Join-Path $idf 'tools\idf.py') build; if ($LASTEXITCODE -ne 0) { throw 'Diagnostic build failed' } } finally { Pop-Location; Stop-Transcript }
+Process ID: 7032
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is D:\Projects\Personal\Shahbaz board\artifacts\i2c-probe-diagnostic-build-20260813.log
+
+
+**********************
+Windows PowerShell transcript end
+End time: 20260813194422
+**********************

@@ -1,0 +1,14 @@
+%% Power-safety requirements are project requirements; verify the exact physical board before mixed-source powering.
+flowchart LR
+    BOARD[shahbaz_interface_board<br/>YD-ESP32-S3 candidate<br/>exact physical revision UNVERIFIED]
+    SHT[SHT3X-DIS module<br/>project supply 3.3 V]
+    BARO[GY-63 MS5611 module<br/>project supply 3.3 V]
+    ANDROID[Android phone<br/>operational USB Host]
+    VBUS[VBUS / board power path<br/>exact mixed-source behavior UNVERIFIED]
+    SAFE[Requirement: Android VBUS must not power<br/>board, sensors, or battery rail]
+
+    BOARD -->|3.3 V + GND| SHT
+    BOARD -->|3.3 V + GND| BARO
+    ANDROID <-->|USB data + signal GND| BOARD
+    ANDROID --> VBUS
+    VBUS --> SAFE

@@ -1,0 +1,10 @@
+%% I2C configuration used by the project. Breakout-level electrical details not visible in photos remain UNVERIFIED.
+flowchart TB
+    ESP[YD-ESP32-S3 candidate<br/>I2C master<br/>GPIO8 SDA / GPIO9 SCL]
+    BUS[(Shared 3.3 V I2C bus<br/>400 kHz project target<br/>effective pull-ups/rise time UNVERIFIED)]
+    SHT[SHT3X-DIS 4-pin module<br/>configured 0x44<br/>SHT3x chip supports 0x44/0x45]
+    MS[GY-63 MS5611 module<br/>configured 0x77<br/>PS HIGH selects I2C<br/>CSB LOW selects 0x77<br/>SDO NC]
+
+    ESP <--> BUS
+    BUS <--> SHT
+    BUS <--> MS
