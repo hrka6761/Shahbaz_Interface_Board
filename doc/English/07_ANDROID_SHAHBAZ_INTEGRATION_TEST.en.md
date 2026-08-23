@@ -24,7 +24,7 @@ The Shahbaz application must integrate equivalent behavior to the provided refer
 - `android_reference/src/android/kotlin/com/shahbaz/androidusb/ShahbazUsbCdcTransport.kt`
 - `android_reference/src/android/kotlin/com/shahbaz/androidusb/ShahbazInterfaceBoardClient.kt`
 
-The Android-framework code uses `UsbManager`, CDC interface discovery, bulk IN/OUT endpoints, real attach/detach handling, Protocol v2 session setup, heartbeat, periodic TimeSync refresh, sensor decoding, and QNH-based altitude.
+The Android-framework code uses `UsbManager`, CDC interface discovery, bulk IN/OUT endpoints, physical attach/detach plus CDC-DTR logical-session handling, Protocol v2 session setup, heartbeat, periodic TimeSync refresh, sensor decoding, and QNH-based altitude.
 
 ## 1. USB permission and device selection
 
@@ -39,14 +39,15 @@ The Android-framework code uses `UsbManager`, CDC interface discovery, bulk IN/O
 After opening USB, the app must:
 
 1. reset all previous parser/session state;
-2. send `TimeSyncRequest` using Android monotonic time;
-3. receive `TimeSyncResponse`;
-4. verify the echoed client timestamp;
-5. accept a non-zero session token;
-6. request DeviceInfo;
-7. start telemetry;
-8. begin heartbeat maintenance;
-9. refresh TimeSync periodically during long sessions.
+2. deassert and then assert CDC DTR to establish an unambiguous logical-session boundary;
+3. send `TimeSyncRequest` using Android monotonic time;
+4. receive `TimeSyncResponse`;
+5. verify the echoed client timestamp;
+6. accept a non-zero session token;
+7. request DeviceInfo;
+8. start telemetry;
+9. begin heartbeat maintenance;
+10. refresh TimeSync periodically during long sessions.
 
 ## 3. Live sensor validation in Shahbaz
 
@@ -79,6 +80,7 @@ Changing QNH in the app must change displayed/calculated altitude without changi
 5. The app must establish a new TimeSync/session.
 6. The new session token must be non-zero and different from the previous physical attachment.
 7. No stale data or old-session command may be treated as current.
+8. Close and reopen the app's CDC connection without unplugging the cable; DTR reopen must produce another clean token and session.
 
 ## 6. Lifecycle/error checks
 
@@ -87,6 +89,7 @@ Verify at minimum:
 - USB permission denial is handled without a crash;
 - USB detach while telemetry is active is handled without a crash;
 - app foreground/background transitions do not silently reuse a closed USB connection;
+- a rapid DTR close/open with RX bytes on both sides of the boundary discards the crossing chunk and never processes the new TimeSync under the previous token/epoch;
 - `SessionMismatch` triggers session re-establishment rather than token reuse;
 - `StaleOrExpired` triggers a fresh TimeSync using current monotonic time;
 - reconnect resumes fresh sensor telemetry.
@@ -103,6 +106,7 @@ Verify at minimum:
 - [ ] Shahbaz calculates altitude from pressure + app QNH.
 - [ ] QNH changes affect altitude but not raw pressure.
 - [ ] Physical USB reconnect creates a clean new session.
+- [ ] CDC close/reopen with the cable retained creates a clean new session.
 - [ ] Permission denial/detach/session errors are handled safely.
 - [ ] No actuator activates in the default build.
 

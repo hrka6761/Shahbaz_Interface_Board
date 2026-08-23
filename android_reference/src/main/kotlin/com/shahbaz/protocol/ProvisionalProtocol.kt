@@ -536,7 +536,7 @@ data class TimeSyncResponse(
     val sessionToken: ULong,
 )
 
-/** Decode the sole currently documented response payload, otherwise return null. */
+/** Decode a TimeSyncResponse payload, otherwise return null. */
 fun decodeTimeSyncResponse(frame: DecodedFrame): TimeSyncResponse? {
     if (
         frame.header.messageType != MessageType.TIME_SYNC_RESPONSE ||
@@ -552,6 +552,166 @@ fun decodeTimeSyncResponse(frame: DecodedFrame): TimeSyncResponse? {
     )
 }
 
+enum class DeviceTarget(val wireValue: Int) {
+    ESP32_S3(1);
+
+    companion object {
+        fun fromWire(value: Int): DeviceTarget =
+            values().firstOrNull { it.wireValue == value }
+                ?: throw ProtocolException("unsupported DeviceInfo target $value")
+    }
+}
+
+/** Raw, bounded 20-byte DeviceInfoResponse decoded from Protocol v2. */
+data class DeviceInfo(
+    val protocolVersion: Int,
+    val target: DeviceTarget,
+    val supportedMotorChannels: Int,
+    val supportedServoChannels: Int,
+    val detectedFlashBytes: UInt,
+    val detectedPsramBytes: UInt,
+    val boardValidationIssueMask: UInt,
+    val activeMotorChannels: Int,
+    val activeServoChannels: Int,
+    val actuatorAvailable: Boolean,
+    val actuatorsEnabledByConfiguration: Boolean,
+)
+
+/** Validated sensor-only profile plus retained, observable advisory evidence bits. */
+data class ValidatedDeviceInfo(
+    val deviceInfo: DeviceInfo,
+    val advisoryIssueMask: UInt,
+)
+
+object BoardValidationIssues {
+    const val FATAL_MASK: UInt = 0x400Fu
+    const val ADVISORY_MASK: UInt = 0xBFF0u
+    const val KNOWN_MASK: UInt = 0xFFFFu
+}
+
+fun decodeDeviceInfoResponse(frame: DecodedFrame): DeviceInfo? {
+    if (frame.header.messageType != MessageType.DEVICE_INFO_RESPONSE) return null
+    if (frame.payload.size != 20) {
+        throw ProtocolException("DeviceInfoResponse payload must be 20 bytes")
+    }
+    return DeviceInfo(
+        protocolVersion = readU8(frame.payload, 0),
+        target = DeviceTarget.fromWire(readU8(frame.payload, 1)),
+        supportedMotorChannels = readU8(frame.payload, 2),
+        supportedServoChannels = readU8(frame.payload, 3),
+        detectedFlashBytes = readU32(frame.payload, 4),
+        detectedPsramBytes = readU32(frame.payload, 8),
+        boardValidationIssueMask = readU32(frame.payload, 12),
+        activeMotorChannels = readU8(frame.payload, 16),
+        activeServoChannels = readU8(frame.payload, 17),
+        actuatorAvailable = readBooleanByte(frame.payload, 18, "actuator_available"),
+        actuatorsEnabledByConfiguration = readBooleanByte(
+            frame.payload,
+            19,
+            "actuators_enabled_by_config",
+        ),
+    )
+}
+
+fun DeviceInfo.validateSensorOnlyProfile(): ValidatedDeviceInfo {
+    val fatalIssues = boardValidationIssueMask and BoardValidationIssues.FATAL_MASK
+    val unknownIssues = boardValidationIssueMask and BoardValidationIssues.KNOWN_MASK.inv()
+    when {
+        protocolVersion != ProvisionalWire.VERSION ->
+            throw ProtocolException(
+                "DeviceInfo reports Protocol $protocolVersion, expected ${ProvisionalWire.VERSION}",
+            )
+        target != DeviceTarget.ESP32_S3 ->
+            throw ProtocolException("DeviceInfo target is not ESP32-S3")
+        fatalIssues != 0u ->
+            throw ProtocolException(
+                "DeviceInfo reports fatal board issues 0x${fatalIssues.toString(16)}",
+            )
+        unknownIssues != 0u ->
+            throw ProtocolException(
+                "DeviceInfo reports unknown board issues 0x${unknownIssues.toString(16)}",
+            )
+        actuatorAvailable ||
+            actuatorsEnabledByConfiguration ||
+            activeMotorChannels != 0 ||
+            activeServoChannels != 0 ->
+            throw ProtocolException(
+                "sensor-only client requires actuator hardware unavailable and disabled",
+            )
+    }
+    return ValidatedDeviceInfo(
+        deviceInfo = this,
+        advisoryIssueMask = boardValidationIssueMask and BoardValidationIssues.ADVISORY_MASK,
+    )
+}
+
+/** ApplicationAction values emitted in the fifth byte of CommandAck. */
+enum class ApplicationAction(val wireValue: Int) {
+    NONE(0),
+    REQUEST_DEVICE_INFO(1),
+    START_TELEMETRY(2),
+    STOP_TELEMETRY(3),
+    SET_SENSOR_RATE(4),
+    REQUEST_DEVICE_STATUS(5),
+    HEARTBEAT_RECEIVED(6),
+    HEARTBEAT_ACK_RECEIVED(7),
+    PING_RECEIVED(8),
+    PONG_RECEIVED(9),
+    TIME_SYNC_REQUEST_RECEIVED(10),
+    EMERGENCY_STOP_APPLIED(11),
+    DISARM_APPLIED(12),
+    ARM_APPLIED(13),
+    MOTOR_COMMAND(14),
+    SERVO_COMMAND(15),
+    ACTUATOR_COMMAND(16),
+    SET_CONTROL_MODE(17);
+
+    companion object {
+        fun fromWire(value: Int): ApplicationAction =
+            values().firstOrNull { it.wireValue == value }
+                ?: throw ProtocolException("unknown CommandAck application action $value")
+    }
+}
+
+data class CommandAck(
+    val requestSequence: UInt,
+    val action: ApplicationAction,
+)
+
+data class CommandNack(
+    val requestSequence: UInt,
+    val reasonCode: Int,
+    val validationErrorCode: Int,
+)
+
+fun decodeCommandAck(frame: DecodedFrame): CommandAck? {
+    if (frame.header.messageType != MessageType.COMMAND_ACK) return null
+    if (frame.payload.size != 5) throw ProtocolException("CommandAck payload must be 5 bytes")
+    return CommandAck(
+        requestSequence = readU32(frame.payload, 0),
+        action = ApplicationAction.fromWire(readU8(frame.payload, 4)),
+    )
+}
+
+fun decodeCommandNack(frame: DecodedFrame): CommandNack? {
+    if (frame.header.messageType != MessageType.COMMAND_NACK) return null
+    if (frame.payload.size != 8) throw ProtocolException("CommandNack payload must be 8 bytes")
+    return CommandNack(
+        requestSequence = readU32(frame.payload, 0),
+        reasonCode = readU16(frame.payload, 4),
+        validationErrorCode = readU16(frame.payload, 6),
+    )
+}
+
+fun requireHeartbeatAck(frame: DecodedFrame): Boolean {
+    if (frame.header.messageType != MessageType.HEARTBEAT_ACK) return false
+    if (frame.header.priority != MessagePriority.CRITICAL) {
+        throw ProtocolException("HeartbeatAck priority must be critical")
+    }
+    if (frame.payload.isNotEmpty()) throw ProtocolException("HeartbeatAck payload must be empty")
+    return true
+}
+
 private fun requireUnsignedInt(name: String, value: Int, bits: Int) {
     val maximum = when (bits) {
         8 -> 0xFF
@@ -564,6 +724,13 @@ private fun requireUnsignedInt(name: String, value: Int, bits: Int) {
 }
 
 private fun readU8(input: ByteArray, offset: Int): Int = input[offset].toInt() and 0xFF
+
+private fun readBooleanByte(input: ByteArray, offset: Int, label: String): Boolean =
+    when (val value = readU8(input, offset)) {
+        0 -> false
+        1 -> true
+        else -> throw ProtocolException("$label must be encoded as 0 or 1, got $value")
+    }
 
 private fun readU16(input: ByteArray, offset: Int): Int =
     readU8(input, offset) or (readU8(input, offset + 1) shl 8)
@@ -670,10 +837,10 @@ data class Ms5611Reading(
 
 object SensorValidity {
     const val TRANSPORT_VALID: UInt = 0x01u
-    const val TIMING_VALID: UInt = 0x02u
+    const val CRC_VALID: UInt = 0x02u
     const val CALIBRATION_VALID: UInt = 0x04u
-    const val PLAUSIBILITY_VALID: UInt = 0x08u
-    const val SENSOR_VALID: UInt = 0x10u
+    const val TIMING_VALID: UInt = 0x08u
+    const val PLAUSIBILITY_VALID: UInt = 0x10u
     const val COMMON_REQUIRED: UInt = 0x1Bu
 }
 

@@ -27,7 +27,8 @@ validated ESP-IDF I2C adapter
 
 ```text
 USB CDC RX
-  -> attachment-boundary RX/TX flush
+  -> physical-mount / CDC-DTR epoch detection
+  -> logical-session RX/TX flush
   -> COBS/CRC frame decoder
   -> ProtocolEngine session-token check
   -> sender monotonic-time freshness mapping
@@ -36,7 +37,7 @@ USB CDC RX
   -> requested subsystem
 ```
 
-هر اتصال فیزیکی <code dir="ltr">USB</code> یک <code dir="ltr">Session Token</code> تصادفی 64 بیتی تازه می‌گیرد. فرمان وابسته به <code dir="ltr">Session</code> قبلی پیش از <code dir="ltr">Dispatch</code> رد می‌شود. <code dir="ltr">TimeSync</code> ساعت یکنواخت فرستنده را به زمان دریافت دستگاه نگاشت می‌کند و <code dir="ltr">Frame</code> قدیمی پیش از آن‌که <code dir="ltr">heartbeat/control freshness</code> عادی را تازه کند رد می‌شود.
+هر بار بازشدن منطقی <code dir="ltr">CDC</code> یک <code dir="ltr">Session Token</code> تصادفی 64 بیتی تازه می‌گیرد. <code dir="ltr">TinyUSB mount</code> پیکربندی فیزیکی را دنبال می‌کند، درحالی‌که <code dir="ltr">mounted && DTR</code> اتصال نرم‌افزار را تعریف می‌کند. پرچم‌ها و <code dir="ltr">connection epoch</code> در یک نمای اتمیک منسجم منتشر می‌شوند تا حتی جفت بستن/بازکردن میان دو دور حلقه اصلی همه وضعیت‌های <code dir="ltr">Session</code> را پاک کند. پذیرش <code dir="ltr">Session</code> تا تکمیل پاک‌سازی <code dir="ltr">FIFO</code> در سمت <code dir="ltr">callback</code> صبر می‌کند و نما را پس از پاک‌سازی و ساخت <code dir="ltr">Token</code> دوباره بررسی می‌کند. مسیر <code dir="ltr">RX</code> به‌جای بازنشانی هم‌زمان یک جریان بدون برچسب، از بخش‌های ثابت صف <code dir="ltr">FreeRTOS</code> دارای <code dir="ltr">epoch</code> استفاده می‌کند و پس از خواندن و بلافاصله پیش از تحویل به <code dir="ltr">Protocol</code> دوباره بررسی می‌شود. آیتم‌های <code dir="ltr">TX</code> نیز برچسب <code dir="ltr">epoch</code> دارند و یک محافظ نوشتن بدون انتظار به‌همراه پاک‌سازی <code dir="ltr">FIFO</code> در <code dir="ltr">callback</code> و پس از نوشتن، هر دو ترتیب رقابت را پوشش می‌دهد. فرمان وابسته به <code dir="ltr">Session</code> منطقی قبلی پیش از <code dir="ltr">Dispatch</code> رد می‌شود. <code dir="ltr">TimeSync</code> ساعت یکنواخت فرستنده را به زمان دریافت دستگاه نگاشت می‌کند و <code dir="ltr">Frame</code> قدیمی پیش از آن‌که <code dir="ltr">heartbeat/control freshness</code> عادی را تازه کند رد می‌شود.
 
 ## ترتیب امن راه‌اندازی
 
@@ -71,7 +72,7 @@ runtime board/memory/GPIO/evidence validation
 - خرابی یک <code dir="ltr">Sensor</code> نباید <code dir="ltr">USB/Heartbeat</code> یا <code dir="ltr">Sensor</code> دیگر را متوقف کند.
 - <code dir="ltr">Buffer</code> و صف‌ها محدود هستند.
 - <code dir="ltr">Parser</code> بعد از <code dir="ltr">Frame</code> خراب <code dir="ltr">resync</code> می‌شود.
-- اتصال فیزیکی مجدد یک مرز سخت <code dir="ltr">Protocol Session</code> است.
+- اتصال فیزیکی مجدد یا بستن/بازکردن <code dir="ltr">CDC DTR</code> یک مرز سخت <code dir="ltr">Protocol Session</code> است.
 - <code dir="ltr">Timestamp</code> قدیمی یا <code dir="ltr">Token</code> اتصال قبلی نمی‌تواند سلامت لینک/کنترل را تازه کند.
 - <code dir="ltr">Actuator</code> از مسیر <code dir="ltr">Sensor</code> جدا و فقط پس از <code dir="ltr">Validation/Evidence Gate</code> <code dir="ltr">Initialize</code> می‌شود.
 - زمان اجرای پایدار نباید به تخصیص نامحدود حافظه وابسته باشد.

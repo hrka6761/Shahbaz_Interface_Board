@@ -33,7 +33,7 @@ Use Windows HIL to determine whether the board is publishing valid SHT30/MS5611 
 
 ## Shahbaz reports `SessionMismatch`
 
-Never reuse a token across physical USB reconnects. Clear parser/session state on detach, perform a new TimeSync, and use only the newly returned non-zero token.
+Never reuse a token across physical USB reconnects or CDC DTR reopen. Clear parser/session state when the logical link closes, perform a new TimeSync, and use only the newly returned non-zero token.
 
 ## Shahbaz reports `StaleOrExpired`
 
@@ -42,6 +42,7 @@ Use Android monotonic time (`SystemClock.elapsedRealtimeNanos`) for sender times
 ## Android disconnect/reconnect does not recover
 
 - Treat `ACTION_USB_DEVICE_DETACHED` as a hard physical session boundary.
+- Explicitly deassert then assert CDC DTR after claiming the interfaces; each DTR reopen is a new logical session even when the cable stayed attached.
 - Close `UsbDeviceConnection` and release interfaces.
 - Reset the Protocol v2 accumulator, sequence/session token, and time-sync state.
 - On reconnect, obtain permission again if necessary and establish a new session before sending session-bound requests.

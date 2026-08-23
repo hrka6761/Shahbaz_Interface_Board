@@ -23,7 +23,7 @@ Recommended sequence:
 - Buffers and queues must be bounded.
 - No infinite retry or wait loops.
 - Failure of one subsystem must not stop heartbeat/safety processing.
-- Reconnect must reset transport RX/TX, parser, sequence, time mapping, telemetry state, and every other session-specific state before admitting a new random session token.
+- Physical reconnect and CDC DTR reopen must reset transport RX/TX, parser, sequence, time mapping, telemetry state, and every other session-specific state before admitting a new random session token.
 - Every new physical output must sit behind `SafetySupervisor`.
 - Steady-state runtime should not depend on unbounded allocation.
 - Every protocol change needs tests on firmware, framework-independent Kotlin session logic, the Android `UsbManager` integration adapter, and the Python Windows-HIL side.

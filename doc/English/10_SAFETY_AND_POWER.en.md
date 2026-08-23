@@ -38,7 +38,7 @@ Motion commands are gated by `SafetySupervisor`. Loss of USB or a valid heartbea
 - Physical actuator peripherals are initialized only **after** board/memory/GPIO/evidence validation succeeds.
 - Enabling actuators requires exact-board GPIO review plus an eligible evidence record; the build-time contract validator rejects invented or ineligible evidence IDs.
 - Invalid I2C pin assignments fail closed in both `app_main` and the ESP-IDF I2C adapter, including the bus-recovery path.
-- USB reconnect clears transport RX/TX state and protocol session state before a new random session token is admitted.
+- USB reconnect or CDC DTR reopen clears transport RX/TX state and protocol session state before a new random session token is admitted.
 - Session-bound commands require the current token and a mapped sender timestamp inside the v2 freshness window; stale/replayed traffic cannot refresh heartbeat/control freshness.
 - `app_main` is subscribed to the ESP-IDF Task Watchdog. The project default is a 2 s timeout with panic/reset. Service-level liveness is also reported through `TaskHealthMonitor` and can latch `CriticalTaskFailure`.
 

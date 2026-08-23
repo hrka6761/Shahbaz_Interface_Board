@@ -27,7 +27,8 @@ The I2C adapter enforces board GPIO policy inside both `initialize()` and `recov
 
 ```text
 USB CDC RX
-  -> attachment-boundary RX/TX flush
+  -> physical-mount / CDC-DTR epoch detection
+  -> logical-session RX/TX flush
   -> COBS/CRC frame decoder
   -> ProtocolEngine session-token check
   -> sender monotonic-time freshness mapping
@@ -36,7 +37,7 @@ USB CDC RX
   -> requested subsystem
 ```
 
-Every physical USB attachment receives a new random 64-bit session token. Session-bound commands from an old attachment are rejected before command dispatch. Time synchronization maps sender monotonic timestamps into device receive time; stale/expired frames are rejected before they can refresh normal heartbeat/control freshness.
+Every logical CDC open receives a new random 64-bit session token. TinyUSB mount tracks physical configuration, while `mounted && DTR` defines application connectivity. Flags and the connection epoch are published as one coherent atomic snapshot, ensuring that even a close/reopen pair between main-loop polls resets all session state. Admission waits for callback-side FIFO cleanup and revalidates the snapshot after reset/token creation. RX uses fixed, epoch-tagged FreeRTOS queue chunks instead of resetting an untagged stream concurrently with its callback writer; main revalidates after reading and immediately before protocol consumption. TX items are epoch-tagged, and a non-blocking writer guard plus callback-side and post-write FIFO clearing covers both transition/write orderings. Session-bound commands from an earlier logical session are rejected before command dispatch. Time synchronization maps sender monotonic timestamps into device receive time; stale/expired frames are rejected before they can refresh normal heartbeat/control freshness.
 
 ## Safe boot order
 
@@ -71,7 +72,7 @@ The independent whole-loop stall detector is the ESP-IDF Task Watchdog. `app_mai
 - Failure of one sensor must not stop USB/heartbeat or the other sensor.
 - Buffers and queues are bounded.
 - The parser resynchronizes after a corrupted frame.
-- A physical reconnect defines a hard protocol-session boundary.
+- A physical reconnect or CDC DTR close/open defines a hard protocol-session boundary.
 - Stale sender timestamps and prior-session tokens cannot refresh link/control health.
 - Actuators are separated from the sensor path and initialized only after validation/evidence gates.
 - Steady-state runtime should not depend on unbounded allocation.

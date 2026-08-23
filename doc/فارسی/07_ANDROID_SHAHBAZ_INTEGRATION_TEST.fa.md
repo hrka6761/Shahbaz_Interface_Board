@@ -24,7 +24,7 @@ SHT30 + MS5611
 - <code dir="ltr">android_reference/src/android/kotlin/com/shahbaz/androidusb/ShahbazUsbCdcTransport.kt</code>
 - <code dir="ltr">android_reference/src/android/kotlin/com/shahbaz/androidusb/ShahbazInterfaceBoardClient.kt</code>
 
-این کد از <code dir="ltr">UsbManager</code>، رابط <code dir="ltr">CDC</code>، <code dir="ltr">bulk IN/OUT</code>، مرز واقعی اتصال و قطع اتصال، <code dir="ltr">Protocol v2</code>، <code dir="ltr">Heartbeat</code>، نوسازی دوره‌ای <code dir="ltr">TimeSync</code>، رمزگشایی داده <code dir="ltr">Sensor</code> و محاسبه ارتفاع با <code dir="ltr">QNH</code> استفاده می‌کند.
+این کد از <code dir="ltr">UsbManager</code>، رابط <code dir="ltr">CDC</code>، <code dir="ltr">bulk IN/OUT</code>، اتصال/قطع فیزیکی به‌همراه <code dir="ltr">Session</code> منطقی <code dir="ltr">CDC-DTR</code>، <code dir="ltr">Protocol v2</code>، <code dir="ltr">Heartbeat</code>، نوسازی دوره‌ای <code dir="ltr">TimeSync</code>، رمزگشایی داده <code dir="ltr">Sensor</code> و محاسبه ارتفاع با <code dir="ltr">QNH</code> استفاده می‌کند.
 
 ## 1. مجوز <code dir="ltr">USB</code> و انتخاب دستگاه
 
@@ -36,7 +36,7 @@ SHT30 + MS5611
 
 ## 2. ایجاد <code dir="ltr">Session</code>
 
-پس از بازشدن <code dir="ltr">USB</code>، نرم‌افزار باید وضعیت قبلی را پاک کند، <code dir="ltr">TimeSyncRequest</code> را با زمان یکنواخت <code dir="ltr">Android</code> بفرستد، پاسخ را بررسی کند، <code dir="ltr">Session Token</code> غیرصفر بگیرد، <code dir="ltr">DeviceInfo</code> بخواهد، <code dir="ltr">Telemetry</code> را شروع کند و <code dir="ltr">Heartbeat</code> و نوسازی دوره‌ای <code dir="ltr">TimeSync</code> را ادامه دهد.
+پس از بازشدن <code dir="ltr">USB</code>، نرم‌افزار باید وضعیت قبلی را پاک کند، <code dir="ltr">CDC DTR</code> را غیرفعال و سپس فعال کند تا مرز <code dir="ltr">Session</code> منطقی بدون ابهام باشد، <code dir="ltr">TimeSyncRequest</code> را با زمان یکنواخت <code dir="ltr">Android</code> بفرستد، پاسخ را بررسی کند، <code dir="ltr">Session Token</code> غیرصفر بگیرد، <code dir="ltr">DeviceInfo</code> بخواهد، <code dir="ltr">Telemetry</code> را شروع کند و <code dir="ltr">Heartbeat</code> و نوسازی دوره‌ای <code dir="ltr">TimeSync</code> را ادامه دهد.
 
 ## 3. داده زنده در نرم‌افزار شهباز
 
@@ -54,7 +54,7 @@ barometric altitude = f(MS5611 pressure, Shahbaz-app QNH)
 
 ## 5. قطع و اتصال مجدد
 
-پس از قطع <code dir="ltr">USB</code>، نرم‌افزار باید فوراً برد را قطع‌شده بداند و <code dir="ltr">Token</code> و وضعیت قبلی را کنار بگذارد. پس از اتصال مجدد و دریافت مجوز لازم، یک <code dir="ltr">TimeSync</code> و <code dir="ltr">Session</code> جدید ایجاد شود. <code dir="ltr">Token</code> جدید باید غیرصفر و متعلق به اتصال جدید باشد و داده قدیمی نباید معتبر تلقی شود.
+پس از قطع <code dir="ltr">USB</code>، نرم‌افزار باید فوراً برد را قطع‌شده بداند و <code dir="ltr">Token</code> و وضعیت قبلی را کنار بگذارد. پس از اتصال مجدد و دریافت مجوز لازم، یک <code dir="ltr">TimeSync</code> و <code dir="ltr">Session</code> جدید ایجاد شود. <code dir="ltr">Token</code> جدید باید غیرصفر و متعلق به اتصال جدید باشد و داده قدیمی نباید معتبر تلقی شود. همچنین اتصال <code dir="ltr">CDC</code> نرم‌افزار بدون جداکردن کابل بسته و دوباره باز شود؛ بازشدن دوباره <code dir="ltr">DTR</code> باید <code dir="ltr">Token</code> و <code dir="ltr">Session</code> پاک دیگری بسازد.
 
 ## 6. خطاهای چرخه عمر
 
@@ -63,6 +63,7 @@ barometric altitude = f(MS5611 pressure, Shahbaz-app QNH)
 - رد مجوز <code dir="ltr">USB</code> باعث <code dir="ltr">Crash</code> نشود.
 - قطع کابل هنگام <code dir="ltr">Telemetry</code> باعث <code dir="ltr">Crash</code> نشود.
 - تغییر وضعیت <code dir="ltr">foreground/background</code> اتصال بسته‌شده را دوباره استفاده نکند.
+- بستن/بازکردن سریع <code dir="ltr">DTR</code> با داده <code dir="ltr">RX</code> در دو سوی مرز، داده عبوری را دور بریزد و <code dir="ltr">TimeSync</code> جدید را با <code dir="ltr">Token/epoch</code> قبلی پردازش نکند.
 - <code dir="ltr">SessionMismatch</code> باعث ایجاد <code dir="ltr">Session</code> تازه شود.
 - <code dir="ltr">StaleOrExpired</code> با <code dir="ltr">TimeSync</code> تازه و زمان فعلی مدیریت شود.
 
@@ -78,6 +79,7 @@ barometric altitude = f(MS5611 pressure, Shahbaz-app QNH)
 - [ ] ارتفاع از فشار و <code dir="ltr">QNH</code> نرم‌افزار شهباز محاسبه می‌شود.
 - [ ] تغییر <code dir="ltr">QNH</code> فشار خام را تغییر نمی‌دهد.
 - [ ] اتصال مجدد یک <code dir="ltr">Session</code> پاک و تازه می‌سازد.
+- [ ] بستن/بازکردن <code dir="ltr">CDC</code> با کابل متصل یک <code dir="ltr">Session</code> پاک و تازه می‌سازد.
 - [ ] رد مجوز و خطاهای اتصال ایمن مدیریت می‌شوند.
 - [ ] هیچ خروجی فیزیکی فعال نمی‌شود.
 

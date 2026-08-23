@@ -22,7 +22,7 @@
 - <code dir="ltr">Buffer</code>ها و <code dir="ltr">Queue</code>ها کران‌دار باشند.
 - تلاش مجدد یا <code dir="ltr">wait</code> بی‌نهایت وجود نداشته باشد.
 - خرابی یک <code dir="ltr">subsystem</code>، <code dir="ltr">Heartbeat</code>/ایمنی را متوقف نکند.
-- اتصال مجدد همه وضعیت‌های <code dir="ltr">Session</code> را درست <code dir="ltr">Reset</code> کند.
+- اتصال فیزیکی مجدد و بازشدن دوباره <code dir="ltr">CDC DTR</code> باید پیش از پذیرش <code dir="ltr">Session Token</code> تصادفی تازه، همه وضعیت‌های <code dir="ltr">RX/TX</code>، <code dir="ltr">Parser</code>، توالی، نگاشت زمان، <code dir="ltr">Telemetry</code> و دیگر وضعیت‌های <code dir="ltr">Session</code> را <code dir="ltr">Reset</code> کند.
 - هر خروجی فیزیکی جدید پشت <code dir="ltr">SafetySupervisor</code> قرار گیرد.
 - زمان اجرا در حالت پایدار به <code dir="ltr">memory allocation</code> بدون حد تکیه نکند.
 - هر تغییر <code dir="ltr">Protocol</code> باید تست دو سمت <code dir="ltr">Firmware</code>/اندروید داشته باشد.

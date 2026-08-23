@@ -5,7 +5,7 @@
  * @brief Shahbaz version-2 binary header, message vocabulary, and bounded frame codec.
  *
  * Revision 2 is the current firmware/application interoperability contract.
- * It adds per-attachment session binding for state-changing host commands.
+ * It adds per-logical-CDC-session binding for state-changing host commands.
  * Production USB identifiers remain a deployment concern, not a wire-format field.
  */
 

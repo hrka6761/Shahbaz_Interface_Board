@@ -12,16 +12,17 @@
 
 هر <code dir="ltr">Frame</code> شامل نسخه، نوع، اولویت، شماره توالی، زمان یکنواخت فرستنده، طول <code dir="ltr">Payload</code>، خود <code dir="ltr">Payload</code> و <code dir="ltr">CRC</code> است. <code dir="ltr">Decoder</code> باید <code dir="ltr">Frame</code> خراب یا بدساخت را رد کند و بدون راه‌اندازی مجدد دستگاه روی جداکننده صفر بعدی <code dir="ltr">resync</code> شود.
 
-شماره‌های توالی داخل <code dir="ltr">Session</code> فیزیکی فعلی <code dir="ltr">USB</code> بررسی می‌شوند. <code dir="ltr">Frame</code> ردشده به‌علت <code dir="ltr">CRC</code> شماره توالی خود را مصرف یا <code dir="ltr">commit</code> نمی‌کند.
+شماره‌های توالی داخل <code dir="ltr">Session</code> منطقی فعلی <code dir="ltr">CDC</code> بررسی می‌شوند. <code dir="ltr">Frame</code> ردشده به‌علت <code dir="ltr">CRC</code> شماره توالی خود را مصرف یا <code dir="ltr">commit</code> نمی‌کند.
 
 ## ایجاد <code dir="ltr">Session</code>
 
-<code dir="ltr">USB Host</code> تازه متصل‌شده فوراً اجازه ارسال فرمان‌های وابسته به <code dir="ltr">Session</code> را ندارد.
+<code dir="ltr">USB Host</code> تازه متصل‌شده فوراً اجازه ارسال فرمان‌های وابسته به <code dir="ltr">Session</code> را ندارد. <code dir="ltr">TinyUSB mount</code> فقط به این معناست که گوشی دستگاه <code dir="ltr">USB</code> را پیکربندی کرده است؛ <code dir="ltr">Session</code> منطقی <code dir="ltr">Protocol</code> پس از فعال‌شدن <code dir="ltr">CDC DTR</code> توسط <code dir="ltr">Host</code> باز می‌شود.
 
-1. در مرز اتصال، <code dir="ltr">Firmware</code> داده خوانده‌نشده <code dir="ltr">TinyUSB</code>، <code dir="ltr">RX Stream Buffer</code>، صف <code dir="ltr">TX</code>، وضعیت <code dir="ltr">Parser</code>، شماره توالی، وضعیت <code dir="ltr">Telemetry Session</code> و نگاشت زمان را پاک می‌کند.
-2. <code dir="ltr">Firmware</code> با <code dir="ltr">Hardware RNG</code> خود <code dir="ltr">ESP32</code> یک <code dir="ltr">Session Token</code> غیرصفر 64 بیتی تازه می‌سازد.
-3. <code dir="ltr">Host</code> یک <code dir="ltr">TimeSyncRequest</code> می‌فرستد و زمان یکنواخت خود را هم در <code dir="ltr">Header</code> و هم در <code dir="ltr">Payload</code> هشت‌بایتی درخواست قرار می‌دهد.
-4. <code dir="ltr">TimeSyncResponse</code> دارای 32 بایت است:
+1. پس از در اختیار گرفتن رابط‌های <code dir="ltr">CDC</code>، <code dir="ltr">Host</code> ابتدا <code dir="ltr">DTR</code> را غیرفعال و سپس فعال می‌کند. بستن و بازکردن <code dir="ltr">DTR</code> روی کابلی که همچنان متصل است عمداً یک <code dir="ltr">Session</code> منطقی تازه می‌سازد.
+2. در هر تغییر <code dir="ltr">mount/unmount</code> فیزیکی یا <code dir="ltr">DTR</code>، <code dir="ltr">Firmware</code> حافظه‌های <code dir="ltr">RX/TX FIFO</code> در <code dir="ltr">TinyUSB</code> را پاک، صف <code dir="ltr">RX</code> دارای برچسب <code dir="ltr">epoch</code> را تخلیه و صف <code dir="ltr">TX</code>، وضعیت <code dir="ltr">Parser</code>، شماره توالی، وضعیت <code dir="ltr">Telemetry Session</code> و نگاشت زمان را بازنشانی می‌کند. <code dir="ltr">Session</code> فقط هنگامی پذیرفته می‌شود که <code dir="ltr">USB</code> همچنان <code dir="ltr">mounted</code>، <code dir="ltr">DTR</code> فعال و پاک‌سازی مرز کامل شده باشد. هر بخش <code dir="ltr">RX</code> و <code dir="ltr">Frame</code> صف‌شده <code dir="ltr">TX</code>، <code dir="ltr">connection epoch</code> خود را دارد تا رقابت میان <code dir="ltr">callback/main loop</code> نتواند ترافیک را وارد <code dir="ltr">Session</code> بعدی کند.
+3. <code dir="ltr">Firmware</code> با <code dir="ltr">Hardware RNG</code> خود <code dir="ltr">ESP32</code> یک <code dir="ltr">Session Token</code> غیرصفر 64 بیتی تازه می‌سازد.
+4. <code dir="ltr">Host</code> یک <code dir="ltr">TimeSyncRequest</code> می‌فرستد و زمان یکنواخت خود را هم در <code dir="ltr">Header</code> و هم در <code dir="ltr">Payload</code> هشت‌بایتی درخواست قرار می‌دهد.
+5. <code dir="ltr">TimeSyncResponse</code> دارای 32 بایت است:
 
 ```text
 u64 client_send_us
@@ -30,11 +31,11 @@ u64 device_tx_us
 u64 session_token
 ```
 
-5. <code dir="ltr">Host</code> باید تا پایان همان اتصال فیزیکی این <code dir="ltr">Token</code> را برای همه درخواست‌های وابسته به <code dir="ltr">Session</code> استفاده کند.
+6. <code dir="ltr">Host</code> باید تا زمان بسته‌شدن <code dir="ltr">DTR</code> یا پایان اتصال فیزیکی <code dir="ltr">USB</code> این <code dir="ltr">Token</code> را برای همه درخواست‌های وابسته به <code dir="ltr">Session</code> استفاده کند.
 
-<code dir="ltr">Token</code> مربوط به اتصال قبلی با <code dir="ltr">CommandNack / SessionMismatch</code> رد می‌شود. <code dir="ltr">ShahbazLinkSession</code> سمت <code dir="ltr">Android</code> نیز هر 30 ثانیه <code dir="ltr">TimeSync</code> را تازه می‌کند تا اختلاف تدریجی ساعت <code dir="ltr">Host</code> و دستگاه در <code dir="ltr">Session</code>های طولانی محدود بماند؛ خود <code dir="ltr">Session Token</code> در طول همان اتصال فیزیکی تغییر نمی‌کند.
+<code dir="ltr">Token</code> مربوط به <code dir="ltr">Session</code> منطقی قبلی با <code dir="ltr">CommandNack / SessionMismatch</code> رد می‌شود. <code dir="ltr">ShahbazLinkSession</code> سمت <code dir="ltr">Android</code> نیز هر 30 ثانیه <code dir="ltr">TimeSync</code> را تازه می‌کند تا اختلاف تدریجی ساعت <code dir="ltr">Host</code> و دستگاه در <code dir="ltr">Session</code>های طولانی محدود بماند؛ خود <code dir="ltr">Session Token</code> تا زمانی که همان <code dir="ltr">Session</code> منطقی <code dir="ltr">CDC</code> باز است تغییر نمی‌کند.
 
-<code dir="ltr">Session Token</code> مکانیزم اتصال پیام به <code dir="ltr">Session</code> و جلوگیری از پذیرش داده قدیمی است و **جایگزین احراز هویت <code dir="ltr">Host</code> یا رمزنگاری نیست**. این مکانیزم ترافیک بافرشده/کنترلی اتصال فیزیکی قبلی را از <code dir="ltr">Session</code> جدید جدا می‌کند، اما در برابر <code dir="ltr">Host</code> مخربی که هم‌اکنون متصل است و <code dir="ltr">Token</code> جاری را می‌داند، حفاظت احراز هویت ایجاد نمی‌کند.
+<code dir="ltr">Session Token</code> مکانیزم اتصال پیام به <code dir="ltr">Session</code> و جلوگیری از پذیرش داده قدیمی است و **جایگزین احراز هویت <code dir="ltr">Host</code> یا رمزنگاری نیست**. این مکانیزم ترافیک بافرشده/کنترلی اتصال فیزیکی یا <code dir="ltr">Session</code> منطقی قبلی را از <code dir="ltr">Session</code> جدید جدا می‌کند، اما در برابر <code dir="ltr">Host</code> مخربی که هم‌اکنون متصل است و <code dir="ltr">Token</code> جاری را می‌داند، حفاظت احراز هویت ایجاد نمی‌کند.
 
 ## فرمان‌های وابسته به <code dir="ltr">Session</code>
 

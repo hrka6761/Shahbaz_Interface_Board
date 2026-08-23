@@ -59,7 +59,7 @@ auto SafetySupervisor::setUsbConnected(const bool connected,
         ever_connected_ = true;
         freshness_ = {};
         connection_epoch_ = {now_us, true};
-        // A new physical USB session must prove liveness with a fresh heartbeat.
+        // A new logical CDC session must prove liveness with a fresh heartbeat.
         // Only the very first connection is allowed to remain simply Disarmed.
         heartbeat_required_for_recovery_ = reconnect;
     } else if (ever_connected_) {

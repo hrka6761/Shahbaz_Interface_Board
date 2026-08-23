@@ -190,32 +190,74 @@ extern "C" void app_main(void) {
         ESP_LOGI(kLogTag, "app_main subscribed to ESP task watchdog");
     }
 
-    bool previous_connected = false;
+    std::uint32_t handled_connection_epoch = 0U;
+    bool protocol_session_admitted = false;
     protocol.setConnected(false);
     std::array<std::uint8_t, 512U> rx_buffer{};
     std::uint64_t next_log_us = clock.now_us() + kStatusLogPeriodUs;
 
     for (;;) {
         const auto now_us = clock.now_us();
-        const bool connected = usb_ready && usb_transport.connected();
-        if (connected != previous_connected) {
-            // Flush both TinyUSB's unread buffer and the transport stream before
-            // admitting any byte into a new protocol session.
+        const auto observed_connection =
+            usb_ready ? usb_transport.connectionSnapshot() : usb::UsbConnectionSnapshot{};
+        if (observed_connection.epoch != handled_connection_epoch ||
+            observed_connection.connected() != protocol_session_admitted) {
+            // Flush TinyUSB FIFOs and drain the epoch-tagged transport queue
+            // before admitting a new logical CDC protocol session. The epoch
+            // also catches a close/reopen pair between service iterations.
             usb_transport.resetSession();
-            if (connected) {
+            protocol.setConnected(false);
+            protocol_session_admitted = false;
+
+            // Reset can overlap a TinyUSB callback. Only admit a token if one
+            // coherent epoch remains open through token creation and admission.
+            const auto candidate = usb_transport.connectionSnapshot();
+            if (usb_ready && candidate.connected() &&
+                usb_transport.admitSession(candidate.epoch)) {
                 protocol.setConnected(true, new_session_token());
+                const auto confirmed = usb_transport.connectionSnapshot();
+                if (confirmed.epoch == candidate.epoch && confirmed.connected() &&
+                    usb_transport.sessionAdmitted(candidate.epoch)) {
+                    handled_connection_epoch = confirmed.epoch;
+                    protocol_session_admitted = true;
+                } else {
+                    usb_transport.resetSession();
+                    protocol.setConnected(false);
+                }
             } else {
-                protocol.setConnected(false);
+                handled_connection_epoch = candidate.epoch;
             }
-            previous_connected = connected;
-            ESP_LOGI(kLogTag, "USB host %s; protocol session state reset",
-                     connected ? "attached" : "detached");
+            ESP_LOGI(kLogTag,
+                     "USB connection epoch=%" PRIu32 "; CDC logical session %s; protocol state reset",
+                     candidate.epoch,
+                     protocol_session_admitted ? "admitted" :
+                         (candidate.connected() ? "changed during admission" : "closed"));
         }
 
-        if (usb_ready && connected) {
+        if (usb_ready && protocol_session_admitted) {
             for (;;) {
+                const auto before_read = usb_transport.connectionSnapshot();
+                if (before_read.epoch != handled_connection_epoch || !before_read.connected() ||
+                    !usb_transport.sessionAdmitted(handled_connection_epoch)) {
+                    usb_transport.resetSession();
+                    protocol.setConnected(false);
+                    protocol_session_admitted = false;
+                    break;
+                }
                 const auto received = usb_transport.read({rx_buffer.data(), rx_buffer.size()});
                 if (received == 0U) break;
+
+                // A DTR close/open can occur while copying from the stream. Drop
+                // that entire chunk unless it still belongs to the admitted epoch.
+                const auto before_consume = usb_transport.connectionSnapshot();
+                if (before_consume.epoch != handled_connection_epoch ||
+                    !before_consume.connected() ||
+                    !usb_transport.sessionAdmitted(handled_connection_epoch)) {
+                    usb_transport.resetSession();
+                    protocol.setConnected(false);
+                    protocol_session_admitted = false;
+                    break;
+                }
                 protocol.consume({rx_buffer.data(), received});
             }
         }
@@ -229,7 +271,18 @@ extern "C" void app_main(void) {
         (void)safety.evaluate(clock.now_us());
         task_health.mark_alive(health::TaskId::SafetySupervisor, clock.now_us());
 
-        if (usb_ready) usb_transport.serviceTx();
+        const auto before_tx = usb_transport.connectionSnapshot();
+        if (usb_ready && protocol_session_admitted &&
+            before_tx.epoch == handled_connection_epoch && before_tx.connected() &&
+            usb_transport.sessionAdmitted(handled_connection_epoch)) {
+            usb_transport.serviceTx();
+        } else if (protocol_session_admitted) {
+            // Do not let replies/telemetry queued by an obsolete epoch cross a
+            // rapid DTR reopen before the next service-loop iteration.
+            usb_transport.resetSession();
+            protocol.setConnected(false);
+            protocol_session_admitted = false;
+        }
         task_health.mark_alive(health::TaskId::UsbTx, clock.now_us());
         task_health.mark_alive(health::TaskId::Maintenance, clock.now_us());
 
@@ -256,7 +309,7 @@ extern "C" void app_main(void) {
                      "MS5611=%s(err=%u i2c=%u fail=%" PRIu32 " crc=%" PRIu32 ") rx=%" PRIu32
                      " rx_drop=%" PRIu32 " tx_drop=%" PRIu32 " session_reject=%" PRIu32
                      " stale_reject=%" PRIu32,
-                     static_cast<unsigned>(safety.state()), connected ? 1U : 0U,
+                     static_cast<unsigned>(safety.state()), protocol_session_admitted ? 1U : 0U,
                      telemetry.enabled() ? 1U : 0U,
                      sht.online ? "online" : "offline",
                      static_cast<unsigned>(sht.last_error),

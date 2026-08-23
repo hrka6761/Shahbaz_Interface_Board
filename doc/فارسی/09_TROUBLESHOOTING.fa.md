@@ -32,7 +32,7 @@
 
 ## اتصال مجدد بازیابی نمی‌شود
 
-رویداد <code dir="ltr">ACTION_USB_DEVICE_DETACHED</code> باید مرز قطعی <code dir="ltr">Session</code> باشد. <code dir="ltr">UsbDeviceConnection</code> بسته شود، رابط‌ها آزاد شوند و <code dir="ltr">Accumulator</code>، شماره توالی، <code dir="ltr">Session Token</code> و وضعیت <code dir="ltr">TimeSync</code> پاک شوند. پس از اتصال جدید، مجوز لازم دوباره دریافت و <code dir="ltr">Session</code> تازه ساخته شود.
+رویداد <code dir="ltr">ACTION_USB_DEVICE_DETACHED</code> باید مرز قطعی فیزیکی <code dir="ltr">Session</code> باشد. پس از در اختیار گرفتن رابط‌ها، نرم‌افزار باید <code dir="ltr">CDC DTR</code> را صریحاً غیرفعال و سپس فعال کند؛ هر بار بازشدن دوباره <code dir="ltr">DTR</code> حتی با کابل متصل یک <code dir="ltr">Session</code> منطقی تازه است. <code dir="ltr">UsbDeviceConnection</code> بسته شود، رابط‌ها آزاد شوند و <code dir="ltr">Accumulator</code>، شماره توالی، <code dir="ltr">Session Token</code> و وضعیت <code dir="ltr">TimeSync</code> پاک شوند. پس از اتصال جدید، مجوز لازم دوباره دریافت و <code dir="ltr">Session</code> تازه ساخته شود.
 
 ## فشار درست است اما ارتفاع اشتباه است
 

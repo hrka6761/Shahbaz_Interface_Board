@@ -12,16 +12,17 @@ The decoded frame body still uses the fixed 22-byte little-endian header followe
 
 Every frame carries version, type, priority, sequence, sender monotonic timestamp, payload length, payload, and CRC. A decoder must reject corrupted or malformed frames and resynchronize at the next zero delimiter without rebooting the device.
 
-Sequence numbers are checked within the current physical USB session. A rejected CRC frame does not consume/commit its sequence number.
+Sequence numbers are checked within the current logical CDC session. A rejected CRC frame does not consume/commit its sequence number.
 
 ## Session establishment
 
-A newly attached USB host does **not** immediately have permission to send session-bound commands.
+A newly attached USB host does **not** immediately have permission to send session-bound commands. TinyUSB mount only means that the phone configured the USB device; the logical protocol session opens after the host asserts CDC DTR.
 
-1. The firmware flushes TinyUSB unread RX bytes, its own RX stream buffer, TX queue, parser state, sequence state, telemetry-session state, and time mapping at the attachment boundary.
-2. The firmware creates a fresh non-zero 64-bit session token using the ESP32 hardware RNG.
-3. The host sends `TimeSyncRequest` with its monotonic timestamp in both the frame header and the 8-byte request payload.
-4. `TimeSyncResponse` returns 32 bytes:
+1. After claiming the CDC interfaces, the host deasserts and then asserts DTR. A DTR close/open on an already attached cable deliberately creates a new logical session.
+2. At every physical mount/unmount or DTR transition, the firmware flushes TinyUSB RX/TX FIFOs, drains its epoch-tagged RX queue, and resets its TX queue, parser, sequence, telemetry-session state, and time mapping. It admits a session only when USB remains mounted, DTR is asserted, and boundary cleanup has completed. RX chunks and queued TX frames carry their connection epoch so callback/main-loop races cannot move traffic into a later session.
+3. The firmware creates a fresh non-zero 64-bit session token using the ESP32 hardware RNG.
+4. The host sends `TimeSyncRequest` with its monotonic timestamp in both the frame header and the 8-byte request payload.
+5. `TimeSyncResponse` returns 32 bytes:
 
 ```text
 u64 client_send_us
@@ -30,11 +31,11 @@ u64 device_tx_us
 u64 session_token
 ```
 
-5. The host must use that token for every session-bound request until the physical USB session ends.
+6. The host must use that token for every session-bound request until DTR closes or the physical USB connection ends.
 
-A token from a previous attachment is rejected with `CommandNack` / `SessionMismatch`. The provided Android `ShahbazLinkSession` re-runs time synchronization every 30 seconds to keep host/device clock drift bounded during long sessions; the session token itself does not change during that physical attachment.
+A token from an earlier logical session is rejected with `CommandNack` / `SessionMismatch`. The provided Android `ShahbazLinkSession` re-runs time synchronization every 30 seconds to keep host/device clock drift bounded during long sessions; the session token itself does not change while that logical CDC session remains open.
 
-The session token is an anti-stale/session-binding mechanism, **not host authentication or encryption**. It prevents buffered/control traffic from an earlier physical attachment from being accepted as part of a new session; it does not defend against a malicious host that is already connected and knows the current token.
+The session token is an anti-stale/session-binding mechanism, **not host authentication or encryption**. It prevents buffered/control traffic from an earlier physical or logical CDC session from being accepted as part of a new session; it does not defend against a malicious host that is already connected and knows the current token.
 
 ## Session-bound host commands
 
