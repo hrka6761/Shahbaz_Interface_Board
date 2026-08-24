@@ -12,6 +12,8 @@ CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n
 
 برای <code dir="ltr">Session</code> تعاملی، فایل <code dir="ltr">sdkconfig.defaults</code> مقدار بازبینی‌شده <code dir="ltr">1000 ms</code> را برای <code dir="ltr">Heartbeat Timeout</code> و دورهٔ <code dir="ltr">350 ms</code> سمت <code dir="ltr">Android/Windows HIL</code> انتخاب می‌کند. اگر این تنظیم پروژه وجود نداشته باشد، مقدار جایگزین <code dir="ltr">Kconfig</code> در جزء قابل‌استفادهٔ مجدد همچنان عمداً <code dir="ltr">0 ms</code> و بسته و ایمن می‌ماند.
 
+مسیر اصلی خروجی عیب‌یابی باید روی <code dir="ltr">UART0</code> بماند و <code dir="ltr">CONFIG_ESP_CONSOLE_SECONDARY_NONE=y</code> تنظیم شود. خروجی ثانویه <code dir="ltr">USB Serial/JTAG</code> باید غیرفعال بماند تا با مسیر داده <code dir="ltr">native USB-OTG TinyUSB CDC</code> رقابت نکند.
+
 ## 2. ساخت و بارگذاری
 
 ```powershell
@@ -22,6 +24,8 @@ idf.py -p COM_FLASH flash monitor
 ```
 
 فرآیند ساخت، <code dir="ltr">Firmware/Hardware Contract Validator</code> را نیز اجرا می‌کند.
+
+پس از تغییر کد <code dir="ltr">Firmware</code>، هیچ فایل تولیدشدهٔ قبلی از پوشه <code dir="ltr">build/</code> را روی برد بارگذاری نکنید. تصویر فعلی موجود در مخزن مربوط به <code dir="ltr">2026-08-15</code> است و از پیاده‌سازی <code dir="ltr">Android/CDC logical session</code> در <code dir="ltr">2026-08-23</code> قدیمی‌تر است؛ بنابراین با یکپارچه‌سازی فعلی سازگار نیست و باید دوباره ساخته شود. اسکریپت <code dir="ltr">tools/build_esp32.ps1</code> ساخت پاک انجام می‌دهد و اعتبارسنج ساخت تولیدی اکنون هر فایل <code dir="ltr">ELF</code> یا تصویر برنامه را که از ورودی‌های مرتبط <code dir="ltr">Firmware</code> قدیمی‌تر باشد رد می‌کند.
 
 ## 3. دو مسیر متفاوت <code dir="ltr">USB</code>
 

@@ -30,7 +30,9 @@ class ShahbazUsbCdcTransport(
         private const val CDC_REQUEST_TYPE_OUT: Int = 0x21
         private const val CDC_SET_LINE_CODING: Int = 0x20
         private const val CDC_SET_CONTROL_LINE_STATE: Int = 0x22
-        private const val CDC_DTR_RTS: Int = 0x0003
+        // Firmware treats DTR as the logical Protocol v2 session signal. RTS has no
+        // Shahbaz meaning, so leave it deasserted instead of driving an unrelated line.
+        private const val CDC_DTR: Int = 0x0001
     }
 
     interface Listener {
@@ -221,7 +223,7 @@ class ShahbazUsbCdcTransport(
     }
 
     private fun configureCdcAcm(connection: UsbDeviceConnection, comm: UsbInterface) {
-        // Clear DTR/RTS first so every open has a well-defined CDC logical-session edge.
+        // Clear the CDC control lines first so every open has a well-defined DTR edge.
         setControlLineState(connection, comm, 0)
         // CDC SET_LINE_CODING: 115200, 1 stop bit, no parity, 8 data bits.
         val lineCoding = byteArrayOf(
@@ -240,8 +242,8 @@ class ShahbazUsbCdcTransport(
         if (lineCodingResult != lineCoding.size) {
             throw IllegalStateException("CDC SET_LINE_CODING failed: $lineCodingResult")
         }
-        // CDC SET_CONTROL_LINE_STATE: DTR + RTS. TinyUSB does not use baud rate for framing.
-        setControlLineState(connection, comm, CDC_DTR_RTS)
+        // CDC SET_CONTROL_LINE_STATE: DTR only. Firmware intentionally ignores RTS.
+        setControlLineState(connection, comm, CDC_DTR)
     }
 
     private fun setControlLineState(

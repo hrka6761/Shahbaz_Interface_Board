@@ -1,2 +1,2 @@
-source D:/Projects/Personal/Shahbaz board/build/bootloader/gdbinit/symbols
-source D:/Projects/Personal/Shahbaz board/build/bootloader/gdbinit/connect
+source D:/Shahbaz_Interface_Board/build/bootloader/gdbinit/symbols
+source D:/Shahbaz_Interface_Board/build/bootloader/gdbinit/connect

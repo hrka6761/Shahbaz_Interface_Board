@@ -63,7 +63,8 @@ def main() -> int:
             "pinConfigurationValid", "ledc_stop", "NotArmed", "HardwareError"),
         "components/usb_transport_espidf/src/espidf_usb_cdc_transport.cpp": (
             "TINYUSB_EVENT_ATTACHED", "TINYUSB_EVENT_DETACHED", "tinyusb_cdcacm_read",
-            "tinyusb_cdcacm_write_queue", "resetSession", "xStreamBufferReset(rx_stream_)"),
+            "tinyusb_cdcacm_write_queue", "resetSession", "revokeSession",
+            "xQueueReceive(rx_queue_", "chunk.epoch", "sessionAdmitted"),
         "components/platform_espidf/src/espidf_i2c_bus.cpp": (
             "i2c_new_master_bus", "i2c_master_transmit_receive", "recover",
             "configurationAuthorized", "is_valid_i2c_pair"),

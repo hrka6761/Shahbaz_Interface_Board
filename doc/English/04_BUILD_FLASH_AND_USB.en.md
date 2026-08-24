@@ -12,6 +12,8 @@ CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n
 
 For interactive USB sessions, `sdkconfig.defaults` selects the reviewed `1000 ms` heartbeat timeout for the Android and Windows-HIL 350 ms heartbeat cadence. The reusable component's Kconfig fallback remains intentionally fail-closed at `0 ms` when that project configuration is absent.
 
+Keep the primary diagnostic console on UART0 and set `CONFIG_ESP_CONSOLE_SECONDARY_NONE=y`. The secondary USB Serial/JTAG console must remain disabled so it does not compete with the native USB-OTG TinyUSB CDC data path.
+
 ## 2. Build and flash
 
 From an ESP-IDF terminal:
@@ -24,6 +26,8 @@ idf.py -p COM_FLASH flash monitor
 ```
 
 The build runs the firmware/hardware contract validator. Evidence-backed settings fail closed when the configured evidence ID is missing or ineligible.
+
+Do not flash a previously generated file from `build/` after firmware source changes. The image currently present in this repository is dated 2026-08-15 and predates the 2026-08-23 Android/CDC logical-session implementation, so it is not compatible with the current integration and must be rebuilt. `tools/build_esp32.ps1` performs a clean build, and the production-build verifier now rejects an ELF or application image older than any relevant firmware input.
 
 ## 3. Do not confuse the board's USB connectors
 

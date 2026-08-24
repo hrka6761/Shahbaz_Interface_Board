@@ -327,6 +327,12 @@ def validate_build_config(config: dict[str, str]) -> None:
             "sensor/USB production build must keep actuators disabled")
     require(cfg_int(config, "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS") == 1000,
             "configured production build must use the reviewed 1000 ms heartbeat timeout")
+    require(cfg_true(config, "CONFIG_ESP_CONSOLE_UART_DEFAULT"),
+            "production diagnostics must keep the primary console on UART0")
+    require(cfg_true(config, "CONFIG_ESP_CONSOLE_SECONDARY_NONE") and
+            not cfg_true(config, "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG") and
+            not cfg_true(config, "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED"),
+            "native TinyUSB production build must disable the secondary USB Serial/JTAG console")
 
 
 
@@ -403,6 +409,10 @@ def validate_trimmed_config_self_test() -> None:
     validate_build_config({
         "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
         "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+        "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
+        "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
+        "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
+        "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "n",
     })
     clean_errors = ERRORS[before:]
     del ERRORS[before:]
@@ -416,10 +426,26 @@ def validate_trimmed_config_self_test() -> None:
             "CONFIG_BT_ENABLED": "n",
             "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
             "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+            "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
+            "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
+            "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
+            "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "n",
         },
         "enabled actuators in sensor/USB profile": {
             "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "y",
             "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+            "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
+            "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
+            "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
+            "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "n",
+        },
+        "secondary USB Serial JTAG console with TinyUSB": {
+            "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
+            "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+            "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
+            "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "n",
+            "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "y",
+            "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "y",
         },
     }
     for label, config in invalid_cases.items():
@@ -498,8 +524,15 @@ def validate_contract() -> None:
     require("validateAndStripSessionToken" in engine and "SessionMismatch" in engine and
             "senderFreshness" in engine and "maximum_sender_age_us" in engine,
             "ProtocolEngine is missing v2 session/freshness enforcement")
-    require("xStreamBufferReset(rx_stream_)" in usb and "resetSession" in usb,
-            "USB transport is missing stale-RX session reset")
+    require(
+        "resetSession" in usb and
+        "revokeSession();" in usb and
+        "xQueueReceive(rx_queue_" in usb and
+        "chunk.epoch = before.epoch" in usb and
+        "active_rx_.epoch != connection.epoch" in usb and
+        "clearTinyUsbBuffers();" in usb,
+        "USB transport is missing epoch-isolated stale-RX session reset",
+    )
     require("configurationAuthorized()" in i2c_cpp and "is_valid_i2c_pair" in i2c_cpp,
             "I2C adapter does not enforce board GPIO policy internally")
     recovery_source = i2c_cpp.split("auto EspIdfI2cBus::recover", maxsplit=1)
@@ -576,6 +609,10 @@ def validate_contract() -> None:
             "heartbeat timeout component fallback must remain fail-closed at 0 ms")
     require(cfg_int(default_config, "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS") == 1000,
             "production project default must select the reviewed 1000 ms heartbeat timeout")
+    require(cfg_true(default_config, "CONFIG_ESP_CONSOLE_UART_DEFAULT") and
+            cfg_true(default_config, "CONFIG_ESP_CONSOLE_SECONDARY_NONE") and
+            not cfg_true(default_config, "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG"),
+            "production defaults must keep UART0 diagnostics and disable the secondary USB Serial/JTAG console")
 
     # Product architecture contract: Android + Shahbaz is operational; Windows is HIL only.
     intended = str(native_usb.get("intended_role", ""))

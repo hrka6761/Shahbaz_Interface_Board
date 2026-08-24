@@ -22,6 +22,10 @@ CONFIG_TINYUSB_DESC_MANUFACTURER_STRING="Shahbaz"
 CONFIG_TINYUSB_DESC_PRODUCT_STRING="Shahbaz ESP32-S3 Sensor Bridge"
 CONFIG_TINYUSB_DESC_SERIAL_STRING="SHAHBAZ-S3-N16R8"
 CONFIG_TINYUSB_DESC_CDC_STRING="Shahbaz CDC"
+# Keep diagnostics on UART0. The ESP32-S3 USB Serial/JTAG secondary console
+# must not compete with the native USB-OTG TinyUSB CDC data interface.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
 # Actuator hardware is implemented but deliberately off in the safe bench default.
 CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n

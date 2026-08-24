@@ -1,13 +1,13 @@
 # Target labels
  bootloader
 # Source files and their labels
-D:/Projects/Personal/Shahbaz board/build/CMakeFiles/bootloader
-D:/Projects/Personal/Shahbaz board/build/CMakeFiles/bootloader.rule
-D:/Projects/Personal/Shahbaz board/build/CMakeFiles/bootloader-complete.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
-D:/Projects/Personal/Shahbaz board/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule
+D:/Shahbaz_Interface_Board/build/CMakeFiles/bootloader
+D:/Shahbaz_Interface_Board/build/CMakeFiles/bootloader.rule
+D:/Shahbaz_Interface_Board/build/CMakeFiles/bootloader-complete.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+D:/Shahbaz_Interface_Board/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

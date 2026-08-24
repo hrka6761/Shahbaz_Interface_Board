@@ -1,0 +1,4 @@
+# ESP-IDF's component manager verifies vendored dependency bytes against the
+# lock-file hashes. Keep managed text files LF-only on every host, including
+# Windows, while allowing Git to leave binary files untouched.
+managed_components/** text=auto eol=lf

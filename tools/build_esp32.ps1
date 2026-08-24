@@ -12,15 +12,33 @@ if (-not $IdfPy -or -not (Test-Path -LiteralPath $IdfPy)) {
 }
 Push-Location $ProjectRoot
 try {
+    # Rehydrate registry-managed dependencies from dependencies.lock before the
+    # clean build. Git checkouts can omit files ignored inside an upstream
+    # component (TinyUSB's .PVS-Studio/.pvsconfig) or rewrite line endings on
+    # Windows, either of which makes the component-manager checksum fail before
+    # it can clean the tree. The overwrite flag is scoped only to fullclean;
+    # subsequent configure/build steps use strict checksum verification again.
+    $HadOverwriteManagedComponents = Test-Path Env:IDF_COMPONENT_OVERWRITE_MANAGED_COMPONENTS
+    $PreviousOverwriteManagedComponents = $env:IDF_COMPONENT_OVERWRITE_MANAGED_COMPONENTS
+    $env:IDF_COMPONENT_OVERWRITE_MANAGED_COMPONENTS = '1'
+
     # Windows virus scanners, indexers, and recently closed serial monitors can
     # retain a generated build/component file handle for a fraction of a
     # second. Retry the official clean operation; never reuse stale objects.
-    $FullCleanExit = 1
-    for ($Attempt = 1; $Attempt -le 3; $Attempt++) {
-        & $Python $IdfPy fullclean
-        $FullCleanExit = $LASTEXITCODE
-        if ($FullCleanExit -eq 0) { break }
-        if ($Attempt -lt 3) { Start-Sleep -Milliseconds 750 }
+    try {
+        $FullCleanExit = 1
+        for ($Attempt = 1; $Attempt -le 3; $Attempt++) {
+            & $Python $IdfPy fullclean
+            $FullCleanExit = $LASTEXITCODE
+            if ($FullCleanExit -eq 0) { break }
+            if ($Attempt -lt 3) { Start-Sleep -Milliseconds 750 }
+        }
+    } finally {
+        if ($HadOverwriteManagedComponents) {
+            $env:IDF_COMPONENT_OVERWRITE_MANAGED_COMPONENTS = $PreviousOverwriteManagedComponents
+        } else {
+            $env:IDF_COMPONENT_OVERWRITE_MANAGED_COMPONENTS = $null
+        }
     }
     if ($FullCleanExit -ne 0) { throw 'idf.py fullclean failed after three attempts' }
     & $Python $IdfPy set-target esp32s3

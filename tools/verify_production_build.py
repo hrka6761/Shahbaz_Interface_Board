@@ -10,7 +10,9 @@ only the source tree:
 * ``sdkconfig`` and ``flasher_args.json`` prove target/flash/safety settings;
 * the application linker map proves which component archives reached the link;
 * ELF, image, partition-table, and flash-file headers guard against stale or
-  unrelated host-build artifacts.
+  unrelated host-build artifacts; and
+* ELF/image modification times must not predate any firmware source or build
+  input under ``main/``, ``components/``, or ``managed_components/``.
 
 With no build state the default command prints SKIP and succeeds, so it is safe
 in host-only CI. Pass ``--require-build`` after ``idf.py build`` to fail closed
@@ -45,6 +47,10 @@ EXPECTED_CONFIG = {
     "CONFIG_SHAHBAZ_ENABLE_NATIVE_USB_TRANSPORT": "y",
     "CONFIG_TINYUSB_CDC_ENABLED": "y",
     "CONFIG_TINYUSB_CDC_COUNT": "1",
+    "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
+    "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
+    "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
+    "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "n",
     "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
     "CONFIG_SHAHBAZ_I2C_SDA_GPIO": "8",
     "CONFIG_SHAHBAZ_I2C_SCL_GPIO": "9",
@@ -55,6 +61,13 @@ EXPECTED_CONFIG = {
     "CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0": "y",
     "CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1": "y",
     "CONFIG_FREERTOS_HZ": "1000",
+}
+
+# ESP-IDF omits some disabled, derived symbols from sdkconfig entirely instead
+# of serializing them as "# ... is not set". Only these explicitly listed
+# derived symbols may use absence as the fail-closed "n" representation.
+OMITTED_MEANS_DISABLED_CONFIG = {
+    "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED",
 }
 
 PROJECT_SOURCE_ROOTS = {"main", "components", "managed_components"}
@@ -137,6 +150,29 @@ FORBIDDEN_ASSET_SUFFIXES = {
     ".yml",
 }
 COMPILED_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".s", ".asm"}
+FIRMWARE_INPUT_SUFFIXES = COMPILED_SUFFIXES | {
+    ".cmake",
+    ".csv",
+    ".h",
+    ".hh",
+    ".hpp",
+    ".inc",
+    ".ld",
+    ".lld",
+    ".py",
+    ".yaml",
+    ".yml",
+}
+FIRMWARE_ROOT_INPUT_NAMES = {
+    "CMakeLists.txt",
+    "Kconfig",
+    "Kconfig.projbuild",
+    "dependencies.lock",
+    "idf_component.yml",
+    "partitions.csv",
+    "sdkconfig",
+    "sdkconfig.defaults",
+}
 ASSET_SUFFIX_PATTERN = re.compile(
     r"\.(?:bat|bmp|cmd|csv|gif|html|java|jpeg|jpg|json|kt|kts|md|markdown|"
     r"pdf|png|ps1|psd1|psm1|py|pyc|rst|svg|xml|yaml|yml)(?:\b|$)",
@@ -295,6 +331,7 @@ class ProductionBuildVerifier:
         self.verify_component_graph()
         self.verify_compile_commands(required["compile database"])
         self.verify_images()
+        self.verify_artifact_freshness()
         self.verify_flash_manifest(required["flash manifest"])
         self.verify_linker_map()
         return self.result
@@ -445,6 +482,8 @@ class ProductionBuildVerifier:
         self.sdkconfig_values = values
         for key, expected in EXPECTED_CONFIG.items():
             actual = values.get(key)
+            if actual is None and expected == "n" and key in OMITTED_MEANS_DISABLED_CONFIG:
+                actual = "n"
             if actual != expected:
                 self.error(f"sdkconfig invariant {key}={actual!r}, expected {expected!r}")
         if values.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") != "n":
@@ -559,6 +598,60 @@ class ProductionBuildVerifier:
         self.verify_binary_header(self.result.app_binary, "application image", b"\xe9")
         if self.result.app_binary is not None and self.result.app_binary.is_file():
             self.result.app_size = self.result.app_binary.stat().st_size
+
+    def firmware_inputs(self) -> list[Path]:
+        inputs: list[Path] = []
+        for name in FIRMWARE_ROOT_INPUT_NAMES:
+            candidate = self.root / name
+            if candidate.is_file():
+                inputs.append(candidate)
+        for source_root_name in PROJECT_SOURCE_ROOTS:
+            source_root = self.root / source_root_name
+            if not source_root.is_dir():
+                continue
+            for candidate in source_root.rglob("*"):
+                if not candidate.is_file():
+                    continue
+                if (
+                    candidate.name in FIRMWARE_ROOT_INPUT_NAMES or
+                    candidate.name.startswith("Kconfig") or
+                    candidate.suffix.lower() in FIRMWARE_INPUT_SUFFIXES
+                ):
+                    inputs.append(candidate)
+        return inputs
+
+    def verify_artifact_freshness(self) -> None:
+        newest_input: Path | None = None
+        newest_input_mtime_ns = -1
+        for candidate in self.firmware_inputs():
+            try:
+                candidate_mtime_ns = candidate.stat().st_mtime_ns
+            except OSError as exc:
+                self.error(f"cannot stat firmware input {candidate}: {exc}")
+                continue
+            if candidate_mtime_ns > newest_input_mtime_ns:
+                newest_input = candidate
+                newest_input_mtime_ns = candidate_mtime_ns
+        if newest_input is None:
+            self.error("project contains no firmware inputs for build-freshness verification")
+            return
+
+        for label, artifact in (
+            ("application ELF", self.elf_path),
+            ("application image", self.result.app_binary),
+        ):
+            if artifact is None or not artifact.is_file():
+                continue
+            try:
+                artifact_mtime_ns = artifact.stat().st_mtime_ns
+            except OSError as exc:
+                self.error(f"cannot stat {label} {artifact}: {exc}")
+                continue
+            if artifact_mtime_ns < newest_input_mtime_ns:
+                self.error(
+                    f"{label} predates firmware input {newest_input}; "
+                    "run a clean ESP-IDF build before flashing"
+                )
 
     def partition_info(self) -> tuple[int, int] | None:
         path = self.root / "partitions.csv"
@@ -797,6 +890,7 @@ def create_self_test_fixture(base: Path, mutate: Callable[[Path, Path], None] | 
                 "CONFIG_IDF_TARGET", "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME"
             } else f"{key}={value}"
             for key, value in EXPECTED_CONFIG.items()
+            if key not in OMITTED_MEANS_DISABLED_CONFIG
         ) + "\n",
         encoding="utf-8",
     )
@@ -892,7 +986,46 @@ def run_self_test() -> int:
                     f"{label}: skipped={result.skipped}, errors={result.errors}"
                 )
 
-    exercise("accepts clean target artifacts", None, lambda result: result.passed)
+    exercise(
+        "accepts omitted disabled derived config symbol",
+        None,
+        lambda result: result.passed,
+    )
+
+    def enable_derived_usb_console(_root: Path, build: Path) -> None:
+        config_path = build.parent / "sdkconfig"
+        with config_path.open("a", encoding="utf-8") as stream:
+            stream.write("CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED=y\n")
+
+    exercise(
+        "rejects enabled derived USB Serial JTAG console",
+        enable_derived_usb_console,
+        lambda result: any(
+            "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED='y', expected 'n'" in error
+            for error in result.errors
+        ),
+    )
+
+    def make_firmware_input_newer(root: Path, build: Path) -> None:
+        source = root / "components/usb_transport_espidf/include/shahbaz/usb/session.hpp"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("#pragma once\n", encoding="utf-8")
+        newest_artifact_ns = max(
+            (build / "shahbaz_sensor_usb_node.elf").stat().st_mtime_ns,
+            (build / "shahbaz_sensor_usb_node.bin").stat().st_mtime_ns,
+        )
+        newer_ns = newest_artifact_ns + 10_000_000_000
+        os.utime(source, ns=(newer_ns, newer_ns))
+
+    exercise(
+        "rejects ELF/image older than firmware source",
+        make_firmware_input_newer,
+        lambda result: any(
+            "application ELF predates firmware input" in error for error in result.errors
+        ) and any(
+            "application image predates firmware input" in error for error in result.errors
+        ),
+    )
 
     def add_test_source(root: Path, build: Path) -> None:
         source = root / "components/sensor_sht30/test/sht_test.cpp"

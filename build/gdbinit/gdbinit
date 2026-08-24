@@ -1,2 +1,2 @@
-source D:/Projects/Personal/Shahbaz board/build/gdbinit/symbols
-source D:/Projects/Personal/Shahbaz board/build/gdbinit/connect
+source D:/Shahbaz_Interface_Board/build/gdbinit/symbols
+source D:/Shahbaz_Interface_Board/build/gdbinit/connect
