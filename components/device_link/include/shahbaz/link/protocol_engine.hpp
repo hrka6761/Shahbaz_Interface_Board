@@ -108,6 +108,8 @@ class ProtocolEngine final {
     std::uint64_t session_token_{};
     std::uint64_t sync_sender_us_{};
     std::uint64_t sync_device_rx_us_{};
+    protocol::DecodedFrame decoded_frame_{};
+    protocol::DecodedFrame session_frame_{};
     bool connected_{false};
     bool time_synchronized_{false};
 };

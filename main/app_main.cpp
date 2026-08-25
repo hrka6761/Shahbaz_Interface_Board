@@ -193,7 +193,7 @@ extern "C" void app_main(void) {
     std::uint32_t handled_connection_epoch = 0U;
     bool protocol_session_admitted = false;
     protocol.setConnected(false);
-    std::array<std::uint8_t, 512U> rx_buffer{};
+    static std::array<std::uint8_t, 512U> rx_buffer{};
     std::uint64_t next_log_us = clock.now_us() + kStatusLogPeriodUs;
 
     for (;;) {

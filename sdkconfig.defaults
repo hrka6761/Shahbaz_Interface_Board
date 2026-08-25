@@ -39,6 +39,7 @@ CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS=1000
 # Independent runtime stall protection. app_main explicitly subscribes and feeds
 # the task watchdog; a stalled service loop triggers panic/reset to return PWM
 # peripherals to reset-safe state.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 CONFIG_ESP_TASK_WDT_EN=y
 CONFIG_ESP_TASK_WDT_INIT=y
 CONFIG_ESP_TASK_WDT_PANIC=y

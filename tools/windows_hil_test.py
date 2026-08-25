@@ -1314,6 +1314,18 @@ def run_hardware(port_name: str, serial_module, sensor_timeout_s: float,
                 f"active_motors={active_motors} active_servos={active_servos}"
             )
         print("[PASS] runtime ESP32-S3 N16R8 identity/board status + actuators disabled")
+        for index in range(3):
+            session.send(MessageType.DEVICE_INFO_REQUEST)
+            repeated_info = link.wait_for(
+                [MessageType.DEVICE_INFO_RESPONSE, MessageType.COMMAND_NACK],
+                2.0,
+            )
+            if (repeated_info.message_type != MessageType.DEVICE_INFO_RESPONSE or
+                    repeated_info.payload != info.payload):
+                raise RuntimeError(
+                    f"repeated device-info request {index + 1} changed/faulted"
+                )
+        print("[PASS] repeated DeviceInfo requests kept USB CDC stable")
 
         session.send(MessageType.DEVICE_STATUS_REQUEST)
         status = link.wait_for([MessageType.DEVICE_STATUS_RESPONSE, MessageType.COMMAND_NACK], 2.0)

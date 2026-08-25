@@ -89,11 +89,10 @@ void ProtocolEngine::consume(const interfaces::ConstByteView bytes) noexcept {
     (void)safety_.observeUsbTraffic(received_us);
     for (std::size_t i = 0U; i < bytes.size; ++i) {
         increment(statistics_.bytes_received);
-        protocol::DecodedFrame frame{};
-        const auto event = accumulator_.pushByte(bytes.data[i], frame);
+        const auto event = accumulator_.pushByte(bytes.data[i], decoded_frame_);
         if (event.event == protocol::StreamEvent::FrameReady) {
             increment(statistics_.frames_received);
-            processFrame(frame, received_us);
+            processFrame(decoded_frame_, received_us);
         } else if (event.event == protocol::StreamEvent::FrameRejected ||
                    event.event == protocol::StreamEvent::OversizeDiscarded) {
             increment(statistics_.frames_rejected);
@@ -162,38 +161,37 @@ void ProtocolEngine::establishTimeMapping(const protocol::DecodedFrame& frame,
 
 void ProtocolEngine::processFrame(const protocol::DecodedFrame& frame,
                                   const std::uint64_t received_us) noexcept {
-    protocol::DecodedFrame request{};
-    if (!validateAndStripSessionToken(frame, request)) return;
+    if (!validateAndStripSessionToken(frame, session_frame_)) return;
 
     const auto now = clock_.now_us();
-    auto freshness = senderFreshness(request, received_us);
-    if (request.header.message_type == protocol::MessageType::TimeSyncRequest) {
+    auto freshness = senderFreshness(session_frame_, received_us);
+    if (session_frame_.header.message_type == protocol::MessageType::TimeSyncRequest) {
         // TimeSync must be able to repair an aged/drifted mapping. Preserve the
         // monotonic non-regression invariant, but do not judge a new sync
         // request by the very mapping it is intended to replace.
-        freshness = (time_synchronized_ && request.header.sender_monotonic_us < sync_sender_us_)
+        freshness = (time_synchronized_ && session_frame_.header.sender_monotonic_us < sync_sender_us_)
                         ? command::SenderFreshness::StaleOrExpired
                         : command::SenderFreshness::NotSynchronized;
     }
-    const auto result = dispatcher_.dispatch(request, {received_us, now, freshness});
+    const auto result = dispatcher_.dispatch(session_frame_, {received_us, now, freshness});
     if (!result.accepted) {
         if (result.validation_error == command::ValidationError::SenderStaleOrExpired ||
             result.validation_error == command::ValidationError::SenderTimeNotSynchronized) {
             increment(statistics_.freshness_rejects);
         }
-        sendReply(result, request, received_us, now);
+        sendReply(result, session_frame_, received_us, now);
         return;
     }
 
     if (result.action == command::ApplicationAction::TimeSyncRequestReceived) {
-        establishTimeMapping(request, received_us);
+        establishTimeMapping(session_frame_, received_us);
     }
-    if (!applyAction(result, request, now)) {
+    if (!applyAction(result, session_frame_, now)) {
         sendNack(result.request_sequence, protocol::NackReason::InvalidState,
                  command::ValidationError::ActuatorRejected);
         return;
     }
-    sendReply(result, request, received_us, now);
+    sendReply(result, session_frame_, received_us, now);
 }
 
 auto ProtocolEngine::applyAction(const command::DispatchResult& result,
