@@ -489,7 +489,7 @@ auto CommandDispatcher::dispatch(const protocol::DecodedFrame& frame,
     }
     if (type == MessageType::ArmRequest || type == MessageType::ArmConfirm ||
         type == MessageType::ActuatorCommand || type == MessageType::MotorCommand ||
-        type == MessageType::ServoCommand || type == MessageType::SetControlMode) {
+        type == MessageType::ServoCommand) {
         if (!safety_supervisor_.observeValidControlCommand(context.received_monotonic_us,
                                                            context.dispatch_monotonic_us)) {
             return makeNack(frame, NackReason::InvalidState,

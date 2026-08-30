@@ -10,6 +10,9 @@ SafetySupervisor::SafetySupervisor(IActuatorController& actuator,
     if (config_.heartbeat_timeout_us == 0U) {
         config_.heartbeat_timeout_us = 1U;
     }
+    if (config_.control_command_timeout_us == 0U) {
+        config_.control_command_timeout_us = 1U;
+    }
     reset(0U);
 }
 
@@ -244,6 +247,11 @@ auto SafetySupervisor::evaluate(const std::uint64_t now_us) noexcept -> SafetySt
         transitionToSafe(SafetyState::Failsafe, SafeStopReason::LinkFailsafe);
         return state_;
     }
+    if (state_ == SafetyState::Armed && controlCommandExpired(now_us)) {
+        incrementSaturating(counters_.missed_control_commands);
+        transitionToSafe(SafetyState::Failsafe, SafeStopReason::ControlCommandTimeout);
+        return state_;
+    }
     if (state_ == SafetyState::Armed || state_ == SafetyState::Arming) {
         return state_;
     }
@@ -314,6 +322,20 @@ auto SafetySupervisor::heartbeatExpired(const std::uint64_t now_us) const noexce
         return true;
     }
     return (now_us - reference.monotonic_us) >= config_.heartbeat_timeout_us;
+}
+
+auto SafetySupervisor::controlCommandExpired(const std::uint64_t now_us) const noexcept -> bool {
+    if (state_ != SafetyState::Armed) {
+        return false;
+    }
+    const FreshnessStamp& reference =
+        stampBelongsToCurrentSession(freshness_.valid_control_command)
+            ? freshness_.valid_control_command
+            : connection_epoch_;
+    if (!reference.observed || now_us < reference.monotonic_us) {
+        return true;
+    }
+    return (now_us - reference.monotonic_us) >= config_.control_command_timeout_us;
 }
 
 auto SafetySupervisor::stampBelongsToCurrentSession(const FreshnessStamp& stamp) const noexcept -> bool {

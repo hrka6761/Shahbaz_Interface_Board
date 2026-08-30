@@ -14,6 +14,7 @@ enum class SafeStopReason : std::uint8_t {
     ExplicitDisarm,
     ArmRejected,
     ActuatorCommandRejected,
+    ControlCommandTimeout,
     LinkFailsafe,
     Fault,
     EmergencyStop,

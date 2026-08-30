@@ -57,6 +57,7 @@ struct FreshnessTimestamps final {
 
 struct SafetyCounters final {
     std::uint32_t missed_heartbeats{0U};
+    std::uint32_t missed_control_commands{0U};
     std::uint32_t usb_reconnects{0U};
     std::uint32_t crc_errors{0U};
     std::uint32_t parser_errors{0U};
@@ -67,6 +68,7 @@ struct SafetyCounters final {
 
 struct SafetyConfig final {
     std::uint64_t heartbeat_timeout_us{1'000'000U};
+    std::uint64_t control_command_timeout_us{250'000U};
 };
 
 }  // namespace shahbaz::safety

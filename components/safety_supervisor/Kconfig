@@ -9,5 +9,14 @@ config SHAHBAZ_HEARTBEAT_TIMEOUT_MS
         immediately. Select a nonzero value only after the host heartbeat
         period and measured scheduling/USB latency have been reviewed.
 
+config SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS
+    int "Valid actuator command timeout in milliseconds"
+    default 0
+    range 0 1000
+    help
+        Zero is the fail-closed default. Select a nonzero value only after
+        flight-controller loop timing and end-to-end USB latency have been
+        reviewed. This timeout is independent of host heartbeat traffic.
+
 endmenu
 

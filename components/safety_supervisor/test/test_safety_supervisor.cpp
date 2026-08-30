@@ -152,6 +152,26 @@ bool testHeartbeatTimeoutForcesFailsafeFromArmed() {
     return true;
 }
 
+bool testControlCommandTimeoutForcesFailsafeWhileHeartbeatRemainsHealthy() {
+    FakeActuator output{};
+    SafetySupervisor supervisor{output, SafetyConfig{1'000U, 100U}};
+    CHECK(supervisor.completeInitialization(0U));
+    CHECK(supervisor.setUsbConnected(true, 1U));
+    CHECK(makeHealthy(supervisor, 2U));
+    CHECK(supervisor.handleArmRequest(2U) == SafetyCommandResult::AcceptedArmed);
+    CHECK(supervisor.observeValidControlCommand(2U));
+    CHECK(supervisor.handleActuatorCommand(3U) == SafetyCommandResult::AcceptedActuatorCommand);
+    CHECK(output.writePulseUs(ActuatorKind::Motor, 0U, 1200U) == ActuatorStatus::Ok);
+    CHECK(supervisor.observeValidHeartbeat(90U));
+    CHECK(supervisor.evaluate(101U) == SafetyState::Armed);
+    CHECK(supervisor.evaluate(102U) == SafetyState::Failsafe);
+    CHECK(!output.armed());
+    CHECK(!output.outputsEnabled());
+    CHECK(output.last_reason == SafeStopReason::ControlCommandTimeout);
+    CHECK(supervisor.counters().missed_control_commands == 1U);
+    return true;
+}
+
 bool testDisconnectForcesFailsafeAndReconnectNeedsHeartbeat() {
     FakeActuator output{};
     SafetySupervisor supervisor{output, SafetyConfig{100U}};
@@ -292,6 +312,7 @@ int main() {
                         testArmingRequiresHealthyLinkAndDrivesState() &&
                         testArmHardwareFailureLatchesFault() &&
                         testHeartbeatTimeoutForcesFailsafeFromArmed() &&
+                        testControlCommandTimeoutForcesFailsafeWhileHeartbeatRemainsHealthy() &&
                         testDisconnectForcesFailsafeAndReconnectNeedsHeartbeat() &&
                         testFreshnessIsIndependentAndUsesReceiptTimestamp() &&
                         testDisconnectedTrafficCannotSeedNewSession() &&

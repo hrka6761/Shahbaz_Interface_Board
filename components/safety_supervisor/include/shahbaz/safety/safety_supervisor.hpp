@@ -58,6 +58,7 @@ class SafetySupervisor final : public ISafetySupervisor {
                                            std::uint64_t received_us,
                                            std::uint64_t observed_us) noexcept -> bool;
     [[nodiscard]] auto heartbeatExpired(std::uint64_t now_us) const noexcept -> bool;
+    [[nodiscard]] auto controlCommandExpired(std::uint64_t now_us) const noexcept -> bool;
     [[nodiscard]] auto stampBelongsToCurrentSession(const FreshnessStamp& stamp) const noexcept -> bool;
     void latchFault(FaultReason reason) noexcept;
     void transitionToSafe(SafetyState next, SafeStopReason reason) noexcept;
