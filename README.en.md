@@ -24,6 +24,7 @@ Android phone — operational USB Host
 Shahbaz Android application
       +-> live sensor data
       +-> barometric altitude from pressure + app QNH
+      +-> Android flight-controller module
 
 Development-only alternate path:
 ESP32-S3 native USB -> Windows PC -> Windows HIL
@@ -35,7 +36,13 @@ USB RX -> frame decoder -> CommandDispatcher -> SafetySupervisor
 
 The sensor and USB path is enabled by default. Physical actuators are
 **implemented but disabled by default** (`CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n`).
-When enabled, arming requires a connected USB host, synchronized v2 session, a negotiated nonzero session token, and a fresh heartbeat. USB detach, heartbeat timeout, emergency stop, an actuator hardware error, or a latched runtime-health fault immediately forces outputs to the safe stopped state.
+The default `SHAHBAZ_ACTUATOR_BACKEND=null` component profile also excludes the
+physical actuator and LEDC components from the firmware graph and linked image.
+When the actuator profile is enabled, the board still requires a nonempty
+actuator evidence record, unique reviewed GPIOs, and valid runtime memory
+validation before it initializes LEDC PWM or reports active channels in
+`DeviceInfoResponse`.
+When enabled, arming requires a connected USB host, synchronized v2 session, a negotiated nonzero session token, and a fresh heartbeat. USB detach, heartbeat timeout, a 250 ms production timeout without a fresh actuator command while armed, emergency stop, an actuator hardware error, or a latched runtime-health fault immediately forces outputs to the safe stopped state.
 
 Protocol v2 flushes RX/TX/parser state at every physical USB session boundary, rejects old-session control traffic, checks actual sender timestamp freshness, and reports runtime DeviceInfo values. The main task is subscribed to the ESP-IDF Task Watchdog; watchdog timeout is configured to invoke the panic/reset path.
 
@@ -51,6 +58,7 @@ Protocol v2 flushes RX/TX/parser state at every physical USB session boundary, r
 | Motors (optional) | GPIO4/5/6/7, 400 Hz conventional PWM |
 | Servos (optional) | GPIO10/11, 50 Hz conventional PWM |
 | Heartbeat timeout | project production default `1000 ms` for the 350 ms host cadence; component Kconfig fallback remains fail-closed at `0 ms` |
+| Actuator-command timeout | project production default `250 ms`; independent of heartbeat; component Kconfig fallback remains fail-closed at `0 ms` |
 
 For the MS5611, PS must select I2C and CSB must not float. The project default
 is CSB low (`0x77`). Use a common ground and 3.3 V-compatible sensor wiring.
@@ -69,7 +77,11 @@ idf.py build
 idf.py -p COM_FLASH flash monitor
 ```
 
-Or run `powershell -ExecutionPolicy Bypass -File tools\build_esp32.ps1` for the target build. The build path runs `tools/validate_firmware_contract.py`; evidence-backed Kconfig claims fail closed when their configured evidence ID does not correspond to an eligible manifest record.
+Or run `powershell -ExecutionPolicy Bypass -File tools\build_esp32.ps1 -ActuatorBackend null`
+for the safe target build. A future physical build must use `-ActuatorBackend espidf` together with
+the matching enabled Kconfig and eligible exact-board actuator evidence. The build path runs
+`tools/validate_firmware_contract.py`; backend/Kconfig mismatches and unsupported evidence claims
+fail closed.
 
 `esp_tinyusb` is pinned by `components/usb_transport_espidf/idf_component.yml`.
 The default USB descriptor uses Espressif's development VID/default TinyUSB PID

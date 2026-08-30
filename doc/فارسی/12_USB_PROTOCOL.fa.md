@@ -92,7 +92,13 @@ u8  actuator_available
 u8  actuators_enabled_by_config
 ```
 
-در <code dir="ltr">Build</code> پیش‌فرض <code dir="ltr">Sensor</code>/<code dir="ltr">USB</code>، قابلیت <code dir="ltr">Compile</code>‌شده همچنان 4 موتور و 2 <code dir="ltr">Servo</code> است، اما تعداد کانال فعال صفر و <code dir="ltr">actuator_available=0</code> است، چون خروجی فیزیکی غیرفعال است.
+در <code dir="ltr">Build</code> پیش‌فرض <code dir="ltr">Sensor</code>/<code dir="ltr">USB</code>، <code dir="ltr">Protocol</code> ظرفیت منطقی طراحی‌شدهٔ 4 موتور و 2 <code dir="ltr">Servo</code> را گزارش می‌کند، اما تعداد کانال فعال صفر و <code dir="ltr">actuator_available=0</code> است. پروفایل پیش‌فرض <code dir="ltr">SHAHBAZ_ACTUATOR_BACKEND=null</code> کد خروجی فیزیکی و <code dir="ltr">LEDC</code> را از تصویر حذف می‌کند. در ساخت مجاز دارای خروجی، کانال‌ها فقط پس از موفقیت <code dir="ltr">LEDC PWM Backend</code> و عبور از اعتبارسنجی برد و مدرک <code dir="ltr">Actuator</code> فعال می‌شوند.
+
+## فرمان‌های <code dir="ltr">Actuator</code>
+
+خروجی فیزیکی <code dir="ltr">PWM</code> به‌صورت پیش‌فرض غیرفعال است. فعال‌سازی آن به <code dir="ltr">SHAHBAZ_ACTUATOR_BACKEND=espidf</code>، <code dir="ltr">CONFIG_SHAHBAZ_ACTUATORS_ENABLE=y</code>، پرچم بررسی فیزیکی، رکورد مدرک مجاز، <code dir="ltr">GPIO</code>های یکتا و معتبر و موفقیت اعتبارسنجی زمان اجرا نیاز دارد.
+
+در حالت مسلح، دست‌کم یک فرمان پذیرفته‌شدهٔ موتور، <code dir="ltr">Servo</code> یا <code dir="ltr">Actuator</code> عمومی باید <code dir="ltr">Control-command Watchdog</code> مستقل را حداکثر هر <code dir="ltr">250 ms</code> تازه کند. <code dir="ltr">Heartbeat</code> و <code dir="ltr">SetControlMode</code> این زمان را تازه نمی‌کنند. پایان مهلت فوراً خروجی امن را اعمال و دلیل ایمنی مربوط را قفل می‌کند.
 
 ## پیام‌های اصلی
 

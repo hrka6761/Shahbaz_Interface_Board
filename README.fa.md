@@ -29,7 +29,9 @@ Development-only alternate path:
 ESP32-S3 native USB -> Windows PC -> Windows HIL
 ```
 
-مسیر <code dir="ltr">Sensor</code> و <code dir="ltr">USB</code> به‌صورت پیش‌فرض فعال است. خروجی‌های فیزیکی <code dir="ltr">Actuator</code> پیاده‌سازی شده‌اند اما با <code dir="ltr">CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n</code> غیرفعال هستند.
+مسیر <code dir="ltr">Sensor</code> و <code dir="ltr">USB</code> به‌صورت پیش‌فرض فعال است. خروجی‌های فیزیکی چهار موتور و دو <code dir="ltr">Servo</code> پیاده‌سازی شده‌اند، اما با <code dir="ltr">CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n</code> غیرفعال هستند. پروفایل پیش‌فرض <code dir="ltr">SHAHBAZ_ACTUATOR_BACKEND=null</code> همچنین اجزای خروجی فیزیکی و <code dir="ltr">LEDC</code> را از گراف و تصویر نهایی <code dir="ltr">Firmware</code> خارج می‌کند. فعال‌سازی آینده به پروفایل <code dir="ltr">espidf</code>، تنظیم هماهنگ <code dir="ltr">Kconfig</code> و مدرک مجاز همان برد نیاز دارد.
+
+در حالت مسلح، <code dir="ltr">Heartbeat Timeout</code> و <code dir="ltr">Control-command Timeout</code> مستقل هستند. اگر فرمان تازه موتور یا <code dir="ltr">Servo</code> بیش از <code dir="ltr">250 ms</code> نرسد، خروجی‌ها حتی با ادامهٔ <code dir="ltr">Heartbeat</code> به حالت امن می‌روند.
 
 ## تنظیمات سخت‌افزاری پیش‌فرض
 
@@ -43,7 +45,7 @@ ESP32-S3 native USB -> Windows PC -> Windows HIL
 
 ## توسعه و ساخت روی ویندوز
 
-از <code dir="ltr">ESP-IDF 5.4+</code> استفاده کنید:
+از نسخهٔ ثابت <code dir="ltr">ESP-IDF 5.4.4</code> استفاده کنید:
 
 ```powershell
 idf.py set-target esp32s3
@@ -51,6 +53,14 @@ idf.py reconfigure
 idf.py build
 idf.py -p COM_FLASH flash monitor
 ```
+
+ساخت ایمن کامل با اعتبارسنجی گراف و تصویر:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_esp32.ps1 -ActuatorBackend null
+```
+
+گزینهٔ <code dir="ltr">-ActuatorBackend espidf</code> فقط پس از تنظیم هماهنگ <code dir="ltr">Kconfig</code> و ثبت مدرک مجاز <code dir="ltr">Actuator</code> برای همان برد قابل استفاده است؛ وضعیت فعلی مخزن چنین تصویری را مجاز نمی‌کند.
 
 ## تست‌های مستقل از سخت‌افزار
 

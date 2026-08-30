@@ -55,6 +55,13 @@ runtime board/memory/GPIO/evidence validation
 
 Constructing the actuator controller no longer touches LEDC hardware. `forceSafe()` before successful actuator initialization changes software state only, which allows board validation to happen before any physical PWM peripheral is configured.
 
+The default build keeps `CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n` and composes the null actuator backend.
+An actuator-capable build uses the ESP-IDF LEDC PWM backend only when the exact-board actuator
+GPIO review evidence is configured, the selected motor/servo pins validate as unique
+available-with-review GPIOs, and runtime flash/PSRAM validation passes. If any actuator gate fails,
+USB telemetry remains available, `DeviceInfoResponse` reports active actuator channels as zero, and
+arming/motor commands are rejected by the safety/command path.
+
 ## Runtime liveness
 
 The current composition uses one main service task. `TaskHealthMonitor` records liveness points for safety, USB RX/TX, command processing, sensors, telemetry, and maintenance. Critical unhealthy records latch a safety fault.
@@ -75,6 +82,8 @@ The independent whole-loop stall detector is the ESP-IDF Task Watchdog. `app_mai
 - A physical reconnect or CDC DTR close/open defines a hard protocol-session boundary.
 - Stale sender timestamps and prior-session tokens cannot refresh link/control health.
 - Actuators are separated from the sensor path and initialized only after validation/evidence gates.
+- Four ESC motor outputs and two optional servo outputs are advertised as active only after the
+  PWM backend has initialized successfully.
 - Steady-state runtime should not depend on unbounded allocation.
 - Firmware/hardware constants and evidence claims are checked by `tools/validate_firmware_contract.py` during supported target builds.
 

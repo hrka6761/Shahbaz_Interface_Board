@@ -92,7 +92,52 @@ u8  actuator_available
 u8  actuators_enabled_by_config
 ```
 
-In the default sensor/USB build, supported channels remain 4 motors + 2 servos as a compiled capability, while active channel counts are zero and `actuator_available=0` because physical actuation is disabled.
+In the default sensor/USB build, the protocol reports the designed logical capacity of 4 motors +
+2 servos, while active channel counts are zero and `actuator_available=0`. The default
+`SHAHBAZ_ACTUATOR_BACKEND=null` profile excludes physical actuator and LEDC code from the image.
+In an authorized actuator-capable build, active channels become 4 motors + 2 servos only after the
+LEDC PWM backend initializes successfully behind the board-validation and actuator-evidence gates.
+
+## Actuator commands
+
+Physical PWM output is disabled by default. To enable it, firmware must be built with
+`SHAHBAZ_ACTUATOR_BACKEND=espidf`,
+`CONFIG_SHAHBAZ_ACTUATORS_ENABLE=y`, `CONFIG_SHAHBAZ_ACTUATOR_PINS_PHYSICALLY_REVIEWED=y`, a
+nonempty `CONFIG_SHAHBAZ_ACTUATOR_EVIDENCE_RECORD_ID`, valid unique GPIOs, and valid runtime
+flash/PSRAM detection. Android must also opt in with
+`HardwareConnectionConfig.allowActuatorCommands=true`.
+
+Arming and actuator commands are session-bound and therefore carry the 8-byte `session_token`
+prefix described above. Logical payloads after that prefix:
+
+```text
+ArmRequest       empty
+ArmConfirm       empty
+MotorCommand     u8 motor_channel, u16 pulse_us
+ServoCommand     u8 servo_channel, u16 pulse_us
+ActuatorCommand  u8 actuator_kind, u8 channel, u16 pulse_us
+SetControlMode   u8 mode
+```
+
+`actuator_kind` values:
+
+```text
+1 = motor
+2 = servo
+```
+
+The current production PWM backend accepts motor pulses from 900 to 2100 us and servo pulses from
+500 to 2500 us. It exposes motor channels 0 through 3 and servo channels 0 through 1 when active.
+`SetControlMode` currently accepts only mode `0`, the direct PWM command mode used by the Android
+flight-controller module.
+
+`Disarm` and `EmergencyStop` stay tokenless safety overrides. They may request the safer state even
+if their frame is otherwise noncanonical, but only canonical valid frames advance normal
+freshness/sequence state.
+
+While armed, at least one accepted motor, servo, or generic actuator command must refresh the
+independent control-command watchdog within 250 ms. Heartbeat and `SetControlMode` traffic do not
+refresh it. Expiry immediately drives safe outputs and latches the corresponding safety reason.
 
 ## Main message types
 
@@ -104,7 +149,8 @@ In the default sensor/USB build, supported channels remain 4 motors + 2 servos a
 - `SetSensorRate`
 - `Ping / Pong`
 - `CommandAck / CommandNack`
-- actuator/control commands, disabled by default in the current sensor bench configuration
+- actuator/control commands, disabled by default and enabled only by the explicit PWM actuator
+  profile described above
 
 ## SensorSample
 
@@ -140,6 +186,12 @@ SHT30 reports ambient temperature and relative humidity. MS5611 reports pressure
 - Periodically re-synchronize long-lived sessions so clock drift remains well inside the freshness window.
 - Treat `SessionMismatch`, `StaleOrExpired`, CRC failure, and sequence errors as hard command rejection, not as permission to retry with stale data.
 - On reconnect, discard client-side command/session state as well as device-side state.
+- Do not send arm/motor/servo commands unless `DeviceInfoResponse` reports
+  `actuator_available=1`, at least four active motor channels, and an application-level arming
+  decision has passed.
+- Continue sending fresh heartbeat/time-sync traffic and fresh actuator commands while armed. The
+  safety supervisor applies independent heartbeat and actuator-command timeouts; heartbeat traffic
+  alone cannot keep the last PWM output active.
 
 Any future protocol change must update C++ tests, Kotlin protocol/session tests, the Android integration adapter, Python HIL/self-tests, and this document together. `tools/validate_firmware_contract.py` verifies that the C++, Kotlin, and Python protocol versions cannot silently diverge.
 

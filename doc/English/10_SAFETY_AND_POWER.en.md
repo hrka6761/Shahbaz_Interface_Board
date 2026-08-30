@@ -22,7 +22,7 @@ Motors, ESCs, servos, and propellers are not required for acceptance of the curr
 
 ## Heartbeat and fail-safe behavior
 
-Motion commands are gated by `SafetySupervisor`. Loss of USB or a valid heartbeat removes the conditions required for active control. For sensor bench testing, keep actuators completely disabled so the motion path is not involved at all.
+Motion commands are gated by `SafetySupervisor`. Loss of USB or a valid heartbeat removes the conditions required for active control. While armed, loss of fresh actuator commands also forces safe output independently of heartbeat; the production timeout is 250 ms. This prevents the Android USB maintenance loop from keeping the last PWM active if its flight-control loop stalls. For sensor bench testing, keep actuators completely disabled so the motion path is not involved at all.
 
 ## When actuator development begins
 

@@ -22,7 +22,7 @@ CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n
 
 ## <code dir="ltr">Heartbeat</code> و حالت ایمن
 
-فرمان‌های حرکتی در طراحی نهایی پشت <code dir="ltr">SafetySupervisor</code> قرار دارند. قطع <code dir="ltr">USB</code> یا <code dir="ltr">Heartbeat</code> معتبر باید امکان کنترل فعال را از بین ببرد. برای آزمایش رومیزی <code dir="ltr">Sensor</code>ها <code dir="ltr">Actuator</code>ها را کاملاً غیرفعال نگه دارید تا این مسیر اصلاً وارد تست نشود.
+فرمان‌های حرکتی پشت <code dir="ltr">SafetySupervisor</code> قرار دارند. قطع <code dir="ltr">USB</code> یا <code dir="ltr">Heartbeat</code> معتبر امکان کنترل فعال را از بین می‌برد. هنگام مسلح‌بودن، توقف فرمان تازه <code dir="ltr">Actuator</code> نیز مستقل از <code dir="ltr">Heartbeat</code> خروجی‌ها را به حالت امن می‌برد؛ مقدار تولیدی این مهلت <code dir="ltr">250 ms</code> است. بنابراین ادامهٔ حلقهٔ نگهداری <code dir="ltr">USB</code> در <code dir="ltr">Android</code> نمی‌تواند در صورت توقف حلقهٔ کنترل پرواز، آخرین <code dir="ltr">PWM</code> را فعال نگه دارد. برای آزمایش رومیزی <code dir="ltr">Sensor</code>ها <code dir="ltr">Actuator</code>ها را کاملاً غیرفعال نگه دارید تا این مسیر اصلاً وارد تست نشود.
 
 ## هنگام توسعه <code dir="ltr">Actuator</code>ها
 
