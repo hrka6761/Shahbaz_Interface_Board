@@ -1,12 +1,14 @@
 menu "Shahbaz production composition"
 
 config SHAHBAZ_ACTUATORS_ENABLE
-    bool
+    bool "Enable physical PWM actuator outputs"
     default n
     help
-        This sensor/USB production profile is fail-closed and always uses the
-        null actuator implementation. A future actuator-capable build profile
-        must introduce an explicit production composition instead of changing
-        component requirements from a CONFIG value during early expansion.
+        Keep disabled for sensor-only bench builds. When enabled, the
+        production composition still fails closed unless the exact-board
+        actuator GPIO review evidence is configured, the pins validate as
+        available-with-review GPIOs, and runtime memory validation passes.
+        The board exposes four motor PWM outputs and two optional servo PWM
+        outputs only after that gate succeeds.
 
 endmenu

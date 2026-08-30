@@ -52,6 +52,7 @@ EXPECTED_CONFIG = {
     "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
     "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "n",
     "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+    "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS": "250",
     "CONFIG_SHAHBAZ_I2C_SDA_GPIO": "8",
     "CONFIG_SHAHBAZ_I2C_SCL_GPIO": "9",
     "CONFIG_ESP_TASK_WDT_EN": "y",
@@ -182,7 +183,7 @@ ARCHIVE_PATTERN = re.compile(r"\blib[A-Za-z0-9_.+\-]+\.a\b", re.IGNORECASE)
 
 
 def canonical(path: Path) -> str:
-    return os.path.normcase(os.path.abspath(os.fspath(path)))
+    return os.path.normcase(os.path.realpath(os.path.abspath(os.fspath(path))))
 
 
 def relative_to(path: Path, parent: Path) -> Path | None:
@@ -266,10 +267,17 @@ class Result:
 
 
 class ProductionBuildVerifier:
-    def __init__(self, root: Path, build_dir: Path, require_build: bool = False):
+    def __init__(
+        self,
+        root: Path,
+        build_dir: Path,
+        require_build: bool = False,
+        actuator_backend: str = "null",
+    ):
         self.root = Path(os.path.abspath(root))
         self.build_dir = Path(os.path.abspath(build_dir))
         self.require_build = require_build
+        self.actuator_backend = actuator_backend
         self.result = Result()
         self.description: dict[str, Any] = {}
         self.component_paths: dict[str, Path] = {}
@@ -293,6 +301,9 @@ class ProductionBuildVerifier:
             return None
 
     def verify(self) -> Result:
+        if self.actuator_backend not in {"null", "espidf"}:
+            self.error(f"unsupported actuator backend: {self.actuator_backend!r}")
+            return self.result
         build_markers = (
             "CMakeCache.txt",
             "build.ninja",
@@ -435,13 +446,20 @@ class ProductionBuildVerifier:
         }
         if "bt" in normalized_components:
             self.error("Bluetooth component is in the trimmed sensor/USB production graph: bt")
-        if self.sdkconfig_values.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") == "n":
+        if self.actuator_backend == "null":
             if "actuator_null" not in normalized_components:
                 self.error("disabled-actuator production graph is missing actuator_null")
             for component in ("actuator_espidf", "esp_driver_ledc"):
                 if component in normalized_components:
                     self.error(
                         "disabled-actuator production graph contains forbidden component: "
+                        f"{component}"
+                    )
+        else:
+            for component in ("actuator_null", "actuator_espidf", "esp_driver_ledc"):
+                if component not in normalized_components:
+                    self.error(
+                        "physical-actuator production graph is missing required component: "
                         f"{component}"
                     )
 
@@ -486,8 +504,11 @@ class ProductionBuildVerifier:
                 actual = "n"
             if actual != expected:
                 self.error(f"sdkconfig invariant {key}={actual!r}, expected {expected!r}")
-        if values.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") != "n":
+        actuators_enabled = values.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") == "y"
+        if self.actuator_backend == "null" and actuators_enabled:
             self.error("sensor/USB production sdkconfig enables physical actuators")
+        if self.actuator_backend == "espidf" and not actuators_enabled:
+            self.error("physical-actuator production sdkconfig does not enable actuators")
         if re.search(r"(?<![A-Za-z0-9_])CONFIG_BT_ENABLED(?![A-Za-z0-9_])", raw_config):
             self.error(
                 "trimmed production sdkconfig must not contain unavailable CONFIG_BT_ENABLED"
@@ -791,11 +812,22 @@ class ProductionBuildVerifier:
         forbidden = sorted(set(archives) & FORBIDDEN_ARCHIVES)
         for archive in forbidden:
             self.error(f"test framework archive reached application link: {archive}")
-        if self.sdkconfig_values.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") == "n":
+        if self.actuator_backend == "null":
             for archive in ("libactuator_espidf.a", "libesp_driver_ledc.a"):
                 if archive in archives:
                     self.error(
                         "disabled-actuator production archive reached application link: "
+                        f"{archive}"
+                    )
+        else:
+            for archive in (
+                "libactuator_null.a",
+                "libactuator_espidf.a",
+                "libesp_driver_ledc.a",
+            ):
+                if archive not in archives:
+                    self.error(
+                        "physical-actuator production link is missing required archive: "
                         f"{archive}"
                     )
         for archive in archives:
@@ -1160,6 +1192,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="ESP-IDF build directory (default: <project-root>/build)")
     parser.add_argument("--require-build", action="store_true",
                         help="fail instead of SKIP when no target build is present")
+    parser.add_argument("--actuator-backend", choices=("null", "espidf"), default="null",
+                        help="configured actuator component profile (default: null)")
     parser.add_argument("--self-test", action="store_true",
                         help="run synthetic contamination regression tests")
     args = parser.parse_args(argv)
@@ -1167,7 +1201,9 @@ def main(argv: list[str] | None = None) -> int:
         return run_self_test()
     root = Path(os.path.abspath(args.project_root))
     build_dir = Path(os.path.abspath(args.build_dir or (root / "build")))
-    result = ProductionBuildVerifier(root, build_dir, args.require_build).verify()
+    result = ProductionBuildVerifier(
+        root, build_dir, args.require_build, args.actuator_backend
+    ).verify()
     print_result(result, build_dir)
     return 1 if result.errors else 0
 

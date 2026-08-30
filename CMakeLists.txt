@@ -2,6 +2,16 @@
 # actuator outputs are implemented but remain gated by Kconfig and safety checks.
 cmake_minimum_required(VERSION 3.16)
 
+# Component dependencies are resolved before Kconfig values are available.
+# Select the physical backend explicitly at configure time; the production
+# default keeps actuator and LEDC code out of the image entirely.
+set(SHAHBAZ_ACTUATOR_BACKEND "null" CACHE STRING "Actuator backend: null or espidf")
+set_property(CACHE SHAHBAZ_ACTUATOR_BACKEND PROPERTY STRINGS null espidf)
+if(NOT SHAHBAZ_ACTUATOR_BACKEND STREQUAL "null" AND
+   NOT SHAHBAZ_ACTUATOR_BACKEND STREQUAL "espidf")
+    message(FATAL_ERROR "SHAHBAZ_ACTUATOR_BACKEND must be 'null' or 'espidf'")
+endif()
+
 # Seed the ESP-IDF graph from the production composition root. Dependencies
 # declared through REQUIRES/PRIV_REQUIRES are added recursively; unrelated IDF
 # components (including target test frameworks) must not be processed.
@@ -21,6 +31,7 @@ else()
     set(SHAHBAZ_SDKCONFIG_PATH "${CMAKE_SOURCE_DIR}/sdkconfig")
 endif()
 set(SHAHBAZ_CONTRACT_ARGS "${CMAKE_SOURCE_DIR}/tools/validate_firmware_contract.py")
+list(APPEND SHAHBAZ_CONTRACT_ARGS --actuator-backend "${SHAHBAZ_ACTUATOR_BACKEND}")
 if(EXISTS "${SHAHBAZ_SDKCONFIG_PATH}")
     list(APPEND SHAHBAZ_CONTRACT_ARGS --sdkconfig "${SHAHBAZ_SDKCONFIG_PATH}")
 endif()

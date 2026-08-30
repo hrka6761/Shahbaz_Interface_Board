@@ -59,7 +59,6 @@ auto EspIdfPwmActuatorController::configureChannels() noexcept -> bool {
         channel.gpio_num = config_.motor_gpio[i];
         channel.speed_mode = kMode;
         channel.channel = kMotorChannels[i];
-        channel.intr_type = LEDC_INTR_DISABLE;
         channel.timer_sel = LEDC_TIMER_0;
         channel.duty = 0U;
         channel.hpoint = 0;
@@ -72,7 +71,6 @@ auto EspIdfPwmActuatorController::configureChannels() noexcept -> bool {
         channel.gpio_num = config_.servo_gpio[i];
         channel.speed_mode = kMode;
         channel.channel = kServoChannels[i];
-        channel.intr_type = LEDC_INTR_DISABLE;
         channel.timer_sel = LEDC_TIMER_1;
         channel.duty = 0U;
         channel.hpoint = 0;
@@ -86,7 +84,7 @@ auto EspIdfPwmActuatorController::configureChannels() noexcept -> bool {
 auto EspIdfPwmActuatorController::initialize() noexcept -> bool {
     if (initialized_) return true;
     if (!pinConfigurationValid() || !configureChannels()) {
-        forceSafe(safety::SafeStopReason::HardwareFault);
+        forceSafe(safety::SafeStopReason::Fault);
         return false;
     }
     initialized_ = true;
@@ -145,7 +143,7 @@ auto EspIdfPwmActuatorController::writePulseUs(const safety::ActuatorKind kind,
     const auto duty = pulse_us_to_duty(pulse_us, frequency, kResolutionBits);
     if (ledc_set_duty(kMode, ledc_channel, duty) != ESP_OK ||
         ledc_update_duty(kMode, ledc_channel) != ESP_OK) {
-        forceSafe(safety::SafeStopReason::HardwareFault);
+        forceSafe(safety::SafeStopReason::Fault);
         return safety::ActuatorStatus::HardwareError;
     }
     outputs_enabled_ = true;

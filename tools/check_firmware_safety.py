@@ -80,6 +80,24 @@ def main() -> int:
     for rel, tokens in checks.items():
         require_tokens(rel, tokens)
 
+    usb_path = ROOT / "components/usb_transport_espidf/src/espidf_usb_cdc_transport.cpp"
+    if usb_path.is_file():
+        usb = usb_path.read_text(encoding="utf-8", errors="replace")
+        usb_has_stream_reset = "xStreamBufferReset(rx_stream_)" in usb
+        usb_has_queue_drain_reset = all(token in usb for token in (
+            "void EspIdfUsbCdcTransport::resetSession() noexcept",
+            "revokeSession();",
+            "active_rx_ = {};",
+            "active_rx_offset_ = 0U;",
+            "active_rx_used_ = false;",
+            "xQueueReceive(rx_queue_, &discarded, 0U)",
+            "clearTinyUsbBuffers();",
+        ))
+        if not (usb_has_stream_reset or usb_has_queue_drain_reset):
+            ERRORS.append(
+                "USB transport is missing a stale-RX reset path for session boundaries"
+            )
+
     # The fallback actuator must remain independent of ESP-IDF/hardware headers.
     for path in (ROOT / "components/actuator_null").rglob("*"):
         if not path.is_file() or path.suffix not in SOURCE_EXTENSIONS:

@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param()
+param(
+    [ValidateSet('null', 'espidf')]
+    [string]$ActuatorBackend = 'null'
+)
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $Python = (Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1).Source
@@ -41,15 +44,15 @@ try {
         }
     }
     if ($FullCleanExit -ne 0) { throw 'idf.py fullclean failed after three attempts' }
-    & $Python $IdfPy set-target esp32s3
+    & $Python $IdfPy -D "SHAHBAZ_ACTUATOR_BACKEND=$ActuatorBackend" set-target esp32s3
     if ($LASTEXITCODE -ne 0) { throw 'idf.py set-target failed' }
-    & $Python $IdfPy reconfigure
+    & $Python $IdfPy -D "SHAHBAZ_ACTUATOR_BACKEND=$ActuatorBackend" reconfigure
     if ($LASTEXITCODE -ne 0) { throw 'idf.py reconfigure failed' }
-    & $Python tools\validate_firmware_contract.py --sdkconfig sdkconfig
+    & $Python tools\validate_firmware_contract.py --sdkconfig sdkconfig --actuator-backend $ActuatorBackend
     if ($LASTEXITCODE -ne 0) { throw 'Firmware/hardware contract or evidence validation failed' }
     & $Python $IdfPy build
     if ($LASTEXITCODE -ne 0) { throw 'ESP32-S3 target build failed' }
-    & $Python tools\verify_production_build.py --build-dir build --require-build
+    & $Python tools\verify_production_build.py --build-dir build --require-build --actuator-backend $ActuatorBackend
     if ($LASTEXITCODE -ne 0) { throw 'Production image/build-artifact verification failed' }
 } finally {
     Pop-Location

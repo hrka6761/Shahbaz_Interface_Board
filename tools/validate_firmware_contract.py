@@ -319,14 +319,25 @@ def validate_evidence_config(config: dict[str, str]) -> None:
                 "USB/power verification flags require the VERIFIED_MEASUREMENT record ID from hardware_measurements.yaml")
 
 
-def validate_build_config(config: dict[str, str]) -> None:
+def validate_build_config(
+    config: dict[str, str], actuator_backend: str = "null"
+) -> None:
     validate_evidence_config(config)
+    require(actuator_backend in {"null", "espidf"},
+            f"unsupported actuator backend: {actuator_backend!r}")
     require("CONFIG_BT_ENABLED" not in config,
             "trimmed production sdkconfig must omit unavailable CONFIG_BT_ENABLED")
-    require(config.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") == "n",
-            "sensor/USB production build must keep actuators disabled")
+    actuators_enabled = config.get("CONFIG_SHAHBAZ_ACTUATORS_ENABLE", "n") == "y"
+    if actuator_backend == "null":
+        require(not actuators_enabled,
+                "null actuator profile requires CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n")
+    elif actuator_backend == "espidf":
+        require(actuators_enabled,
+                "espidf actuator profile requires CONFIG_SHAHBAZ_ACTUATORS_ENABLE=y")
     require(cfg_int(config, "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS") == 1000,
             "configured production build must use the reviewed 1000 ms heartbeat timeout")
+    require(cfg_int(config, "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS") == 250,
+            "configured production build must use the reviewed 250 ms control-command timeout")
     require(cfg_true(config, "CONFIG_ESP_CONSOLE_UART_DEFAULT"),
             "production diagnostics must keep the primary console on UART0")
     require(cfg_true(config, "CONFIG_ESP_CONSOLE_SECONDARY_NONE") and
@@ -409,6 +420,7 @@ def validate_trimmed_config_self_test() -> None:
     validate_build_config({
         "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
         "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+        "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS": "250",
         "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
         "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
         "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
@@ -426,14 +438,16 @@ def validate_trimmed_config_self_test() -> None:
             "CONFIG_BT_ENABLED": "n",
             "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
             "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+            "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS": "250",
             "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
             "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
             "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
             "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG_ENABLED": "n",
         },
-        "enabled actuators in sensor/USB profile": {
+        "enabled actuators in null profile": {
             "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "y",
             "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+            "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS": "250",
             "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
             "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "y",
             "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "n",
@@ -442,6 +456,7 @@ def validate_trimmed_config_self_test() -> None:
         "secondary USB Serial JTAG console with TinyUSB": {
             "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
             "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+            "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS": "250",
             "CONFIG_ESP_CONSOLE_UART_DEFAULT": "y",
             "CONFIG_ESP_CONSOLE_SECONDARY_NONE": "n",
             "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG": "y",
@@ -457,6 +472,20 @@ def validate_trimmed_config_self_test() -> None:
             bool(case_errors),
             f"trimmed config regression self-test accepted {label}",
         )
+
+    before = len(ERRORS)
+    validate_build_config({
+        "CONFIG_SHAHBAZ_ACTUATORS_ENABLE": "n",
+        "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS": "1000",
+        "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS": "250",
+    }, actuator_backend="espidf")
+    physical_mismatch_errors = ERRORS[before:]
+    del ERRORS[before:]
+    require(
+        any("espidf actuator profile requires" in message
+            for message in physical_mismatch_errors),
+        "trimmed config regression self-test accepted an espidf/Kconfig mismatch",
+    )
 
 
 def validate_contract() -> None:
@@ -575,30 +604,44 @@ def validate_contract() -> None:
     )
     require("CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n" in defaults,
             "default build must keep physical actuators disabled")
+    require(
+        re.search(
+            r"set\(SHAHBAZ_ACTUATOR_BACKEND\s+\"null\"\s+CACHE\s+STRING",
+            root_cmake,
+        ) is not None and
+        "SHAHBAZ_ACTUATOR_BACKEND must be 'null' or 'espidf'" in root_cmake,
+        "root build must default to the null backend and reject unknown actuator profiles",
+    )
     require("CONFIG_BT_ENABLED" not in defaults,
             "trimmed sdkconfig.defaults must not set unavailable Bluetooth Kconfig symbols")
     require(
         re.search(r"config\s+SHAHBAZ_ACTUATORS_ENABLE\b", main_kconfig) is not None and
         "default n" in main_kconfig,
-        "always-seeded main/Kconfig.projbuild must declare the hidden fail-closed actuator selector",
+        "always-seeded main/Kconfig.projbuild must declare the fail-closed actuator selector",
     )
     require(
         re.search(r"config\s+SHAHBAZ_ACTUATORS_ENABLE\b", actuator_kconfig) is None,
         "optional actuator component must not redeclare the global actuator selector",
     )
     require(
-        re.search(r"\bREQUIRES\b(?:(?!\)).)*\bactuator_null\b", main_cmake,
-                  flags=re.DOTALL) is not None and
-        "actuator_espidf" not in main_cmake and
-        "SHAHBAZ_ACTUATOR_COMPONENT" not in main_cmake and
+        "set(SHAHBAZ_ACTUATOR_COMPONENTS actuator_null)" in main_cmake and
+        "list(APPEND SHAHBAZ_ACTUATOR_COMPONENTS actuator_espidf)" in main_cmake and
+        "${SHAHBAZ_ACTUATOR_COMPONENTS}" in main_cmake and
+        "SHAHBAZ_BUILD_PHYSICAL_ACTUATORS=1" in main_cmake and
         "CONFIG_SHAHBAZ_ACTUATORS_ENABLE" not in main_cmake,
-        "main component must depend unconditionally on actuator_null only",
+        "main must select actuator dependencies from the explicit pre-Kconfig build profile",
     )
     require(
         "null_actuator_controller.hpp" in app_main and
-        "espidf_pwm_actuator_controller.hpp" not in app_main and
-        "EspIdfPwmActuatorController" not in app_main,
-        "production composition root must instantiate only the null actuator",
+        "espidf_pwm_actuator_controller.hpp" in app_main and
+        "EspIdfPwmActuatorController" in app_main and
+        "SHAHBAZ_BUILD_PHYSICAL_ACTUATORS" in app_main and
+        "requires -DSHAHBAZ_ACTUATOR_BACKEND=espidf" in app_main and
+        "CONFIG_SHAHBAZ_ACTUATORS_ENABLE" in app_main and
+        "actuator_output_gate_open(board_report)" in app_main and
+        "active_actuator = &pwm_actuator" in app_main and
+        "active_actuator = &null_actuator" in app_main,
+        "production composition must default to null and gate the physical actuator backend",
     )
     safety_fallback_ms = int_literal(
         safety_kconfig,
@@ -609,6 +652,15 @@ def validate_contract() -> None:
             "heartbeat timeout component fallback must remain fail-closed at 0 ms")
     require(cfg_int(default_config, "CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS") == 1000,
             "production project default must select the reviewed 1000 ms heartbeat timeout")
+    control_fallback_ms = int_literal(
+        safety_kconfig,
+        r"config\s+SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS\b.*?\bdefault\s+([0-9]+)",
+        "control-command timeout Kconfig fallback",
+    )
+    require(control_fallback_ms == 0,
+            "control-command timeout component fallback must remain fail-closed at 0 ms")
+    require(cfg_int(default_config, "CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS") == 250,
+            "production project default must select the reviewed 250 ms control-command timeout")
     require(cfg_true(default_config, "CONFIG_ESP_CONSOLE_UART_DEFAULT") and
             cfg_true(default_config, "CONFIG_ESP_CONSOLE_SECONDARY_NONE") and
             not cfg_true(default_config, "CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG"),
@@ -648,6 +700,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sdkconfig", type=Path,
                         help="ESP-IDF sdkconfig to validate production safety/evidence authorization")
+    parser.add_argument("--actuator-backend", choices=("null", "espidf"), default="null",
+                        help="configured actuator component profile (default: null)")
     args = parser.parse_args(argv)
     try:
         validate_contract()
@@ -655,7 +709,7 @@ def main(argv: list[str] | None = None) -> int:
         validate_production_component_seed_self_test()
         validate_trimmed_config_self_test()
         if args.sdkconfig is not None:
-            validate_build_config(parse_sdkconfig(args.sdkconfig))
+            validate_build_config(parse_sdkconfig(args.sdkconfig), args.actuator_backend)
     except Exception as exc:  # malformed manifests must fail closed
         fail(f"contract validator exception: {exc}")
 

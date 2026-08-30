@@ -35,6 +35,7 @@ CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n
 # still forcing the fail-safe state within 1 s of heartbeat loss. The reusable
 # component's Kconfig fallback remains the fail-closed 0 ms value.
 CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS=1000
+CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS=250
 
 # Independent runtime stall protection. app_main explicitly subscribes and feeds
 # the task watchdog; a stalled service loop triggers panic/reset to return PWM

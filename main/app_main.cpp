@@ -5,6 +5,9 @@
 #include "sdkconfig.h"
 
 #include "shahbaz/actuator/null_actuator_controller.hpp"
+#if defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS)
+#include "shahbaz/actuator/espidf_pwm_actuator_controller.hpp"
+#endif
 #include "shahbaz/command/command_dispatcher.hpp"
 #include "shahbaz/health/task_health_monitor.hpp"
 #include "shahbaz/interfaces/board_validator.hpp"
@@ -28,6 +31,15 @@
 #include <cinttypes>
 #include <cstddef>
 #include <cstdint>
+
+#if defined(CONFIG_SHAHBAZ_ACTUATORS_ENABLE) && CONFIG_SHAHBAZ_ACTUATORS_ENABLE && \
+    !defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS)
+#error "CONFIG_SHAHBAZ_ACTUATORS_ENABLE=y requires -DSHAHBAZ_ACTUATOR_BACKEND=espidf"
+#endif
+#if defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS) && \
+    (!defined(CONFIG_SHAHBAZ_ACTUATORS_ENABLE) || !CONFIG_SHAHBAZ_ACTUATORS_ENABLE)
+#error "The espidf actuator backend requires CONFIG_SHAHBAZ_ACTUATORS_ENABLE=y"
+#endif
 
 namespace {
 constexpr char kLogTag[] = "shahbaz";
@@ -61,6 +73,15 @@ void log_issue(const shahbaz::interfaces::BoardValidationReport& report,
     return false;
 #endif
 }
+
+#if defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS)
+[[nodiscard]] auto actuator_output_gate_open(
+    const shahbaz::interfaces::BoardValidationReport& report) noexcept -> bool {
+    return report.runtime_memory_matches() &&
+           !report.has(shahbaz::interfaces::BoardValidationIssue::InvalidActuatorPinConfiguration) &&
+           !report.has(shahbaz::interfaces::BoardValidationIssue::ActuatorEvidenceMissing);
+}
+#endif
 
 [[nodiscard]] constexpr auto health_config() noexcept
     -> std::array<shahbaz::health::TaskHealthConfig, shahbaz::health::kTaskCount> {
@@ -109,11 +130,40 @@ extern "C" void app_main(void) {
     log_issue(board_report, interfaces::BoardValidationIssue::ActuatorEvidenceMissing,
               "actuator GPIO review evidence is missing; physical PWM initialization is blocked");
 
-    static actuator::NullActuatorController active_actuator{};
+    static actuator::NullActuatorController null_actuator{};
+    safety::IActuatorController* active_actuator = &null_actuator;
+    bool physical_actuators_available = false;
+#if defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS)
+    constexpr bool physical_actuators_enabled_by_config = true;
+    bool physical_actuators_requested = false;
+    static actuator::EspIdfPwmActuatorController pwm_actuator{
+        actuator::EspIdfPwmActuatorConfig{
+            {{CONFIG_SHAHBAZ_MOTOR0_GPIO, CONFIG_SHAHBAZ_MOTOR1_GPIO,
+              CONFIG_SHAHBAZ_MOTOR2_GPIO, CONFIG_SHAHBAZ_MOTOR3_GPIO}},
+            {{CONFIG_SHAHBAZ_SERVO0_GPIO, CONFIG_SHAHBAZ_SERVO1_GPIO}},
+            static_cast<std::uint32_t>(CONFIG_SHAHBAZ_MOTOR_PWM_HZ),
+            static_cast<std::uint32_t>(CONFIG_SHAHBAZ_SERVO_PWM_HZ),
+        }};
+    if (actuator_output_gate_open(board_report)) {
+        active_actuator = &pwm_actuator;
+        physical_actuators_requested = true;
+    } else {
+        ESP_LOGE(kLogTag,
+                 "PWM actuator validation/evidence gate blocked; board remains fail-closed with null actuator backend");
+    }
+#else
+    constexpr bool physical_actuators_enabled_by_config = false;
+    ESP_LOGI(kLogTag, "PWM actuators disabled by CONFIG_SHAHBAZ_ACTUATORS_ENABLE");
+#endif
 
     const auto heartbeat_timeout_us =
         static_cast<std::uint64_t>(CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS) * 1'000U;
-    static safety::SafetySupervisor safety{active_actuator, safety::SafetyConfig{heartbeat_timeout_us}};
+    const auto control_command_timeout_us =
+        static_cast<std::uint64_t>(CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS) * 1'000U;
+    static safety::SafetySupervisor safety{
+        *active_actuator,
+        safety::SafetyConfig{heartbeat_timeout_us, control_command_timeout_us},
+    };
     if (!safety.completeInitialization(clock.now_us())) {
         ESP_LOGE(kLogTag, "safety initialization rejected");
         return;
@@ -130,7 +180,26 @@ extern "C" void app_main(void) {
         ESP_LOGE(kLogTag, "board capability/evidence mismatch latched as FAULT; unsafe peripherals remain blocked");
     }
 
-    ESP_LOGI(kLogTag, "PWM actuators excluded from this production image; sensor/USB functions remain active");
+#if defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS)
+    if (physical_actuators_requested) {
+        if (pwm_actuator.initialize()) {
+            physical_actuators_available = true;
+            ESP_LOGI(kLogTag,
+                     "PWM actuators ready: motors=[%d,%d,%d,%d] servos=[%d,%d] motor_hz=%u servo_hz=%u",
+                     CONFIG_SHAHBAZ_MOTOR0_GPIO, CONFIG_SHAHBAZ_MOTOR1_GPIO,
+                     CONFIG_SHAHBAZ_MOTOR2_GPIO, CONFIG_SHAHBAZ_MOTOR3_GPIO,
+                     CONFIG_SHAHBAZ_SERVO0_GPIO, CONFIG_SHAHBAZ_SERVO1_GPIO,
+                     static_cast<unsigned>(CONFIG_SHAHBAZ_MOTOR_PWM_HZ),
+                     static_cast<unsigned>(CONFIG_SHAHBAZ_SERVO_PWM_HZ));
+        } else {
+            ESP_LOGE(kLogTag, "PWM actuator initialization failed after safety supervisor startup");
+        }
+    }
+#endif
+
+    if (physical_actuators_enabled_by_config && !physical_actuators_available) {
+        safety.reportActuatorFailure();
+    }
 
     static platform::EspIdfI2cBus i2c{{CONFIG_SHAHBAZ_I2C_SDA_GPIO,
                                         CONFIG_SHAHBAZ_I2C_SCL_GPIO,
@@ -170,12 +239,12 @@ extern "C" void app_main(void) {
         board_report.issues,
         4U,
         2U,
-        0U,
-        0U,
-        false,
-        false,
+        static_cast<std::uint8_t>(physical_actuators_available ? 4U : 0U),
+        static_cast<std::uint8_t>(physical_actuators_available ? 2U : 0U),
+        physical_actuators_available,
+        physical_actuators_enabled_by_config,
     };
-    static link::ProtocolEngine protocol{dispatcher, safety, active_actuator,
+    static link::ProtocolEngine protocol{dispatcher, safety, *active_actuator,
                                          sensor_scheduler, telemetry, frame_sender, clock,
                                          runtime_info};
     static health::TaskHealthMonitor task_health{health_config()};

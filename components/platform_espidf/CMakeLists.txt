@@ -12,3 +12,11 @@ target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)
 target_compile_options(${COMPONENT_LIB} PRIVATE
     -Wall -Wextra -Wshadow -Wconversion -Wpedantic -Werror
 )
+
+# These adapters include ESP-IDF C headers that intentionally use #include_next.
+set_source_files_properties(
+    src/espidf_board_validator.cpp
+    src/espidf_monotonic_clock.cpp
+    src/espidf_i2c_bus.cpp
+    PROPERTIES COMPILE_OPTIONS "-Wno-pedantic"
+)
