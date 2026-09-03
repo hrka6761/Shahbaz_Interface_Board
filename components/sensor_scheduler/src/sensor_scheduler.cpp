@@ -1201,10 +1201,17 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
 SharedSensorScheduler::SharedSensorScheduler(
     interfaces::II2cBus& bus, interfaces::IMonotonicClock& clock,
     interfaces::ISamplePublisher& publisher, Sht3xConfig sht_config,
-    Ms5611Config ms_config) noexcept
+    Ms5611Config ms_config,
+    interfaces::ISensorShutdownBank* const rangefinder_shutdown,
+    vl53l0x::ArrayConfig rangefinder_config) noexcept
     : clock_(clock),
       sht3x_(bus, clock, publisher, sht_config),
-      ms5611_(bus, clock, publisher, ms_config) {}
+      ms5611_(bus, clock, publisher, ms_config) {
+    if (rangefinder_shutdown != nullptr) {
+        vl53l0x_.emplace(bus, clock, publisher, *rangefinder_shutdown,
+                        rangefinder_config);
+    }
+}
 
 auto SharedSensorScheduler::step() noexcept -> SchedulerStepResult {
     const auto now_us = clock_.now_us();
@@ -1214,34 +1221,48 @@ auto SharedSensorScheduler::step() noexcept -> SchedulerStepResult {
     if (bus_settle_until_us_ != 0U) {
         bus_settle_until_us_ = 0U;
     }
-    const bool sht_ready = sht3x_.ready_at(now_us);
-    const bool ms_ready = ms5611_.ready_at(now_us);
-
-    if (!sht_ready && !ms_ready) {
-        return {};
-    }
+    const std::array<bool, 3U> ready{{
+        sht3x_.ready_at(now_us),
+        ms5611_.ready_at(now_us),
+        vl53l0x_.has_value() && vl53l0x_->ready_at(now_us),
+    }};
     SchedulerStepResult scheduled{};
-    if (sht_ready && ms_ready) {
-        if (next_when_both_ == ScheduledSensor::Sht3x) {
-            next_when_both_ = ScheduledSensor::Ms5611;
+    for (std::uint8_t offset = 0U; offset < ready.size(); ++offset) {
+        const auto index = static_cast<std::uint8_t>(
+            (round_robin_index_ + offset) % ready.size());
+        if (!ready[index]) continue;
+        round_robin_index_ = static_cast<std::uint8_t>((index + 1U) % ready.size());
+        if (index == 0U) {
             scheduled = {ScheduledSensor::Sht3x, sht3x_.step_at(now_us)};
-        } else {
-            next_when_both_ = ScheduledSensor::Sht3x;
+        } else if (index == 1U) {
             scheduled = {ScheduledSensor::Ms5611, ms5611_.step_at(now_us)};
+        } else {
+            const auto range_step = vl53l0x_->step_at(now_us);
+            scheduled.sensor = ScheduledSensor::Vl53l0x;
+            scheduled.step = {
+                range_step.state_advanced,
+                range_step.bus_operation,
+                range_step.sample_published,
+                range_step.bus_settle_until_us,
+            };
         }
-    } else if (sht_ready) {
-        next_when_both_ = ScheduledSensor::Ms5611;
-        scheduled = {ScheduledSensor::Sht3x, sht3x_.step_at(now_us)};
-    } else {
-        next_when_both_ = ScheduledSensor::Sht3x;
-        scheduled = {ScheduledSensor::Ms5611, ms5611_.step_at(now_us)};
+        break;
     }
     if (scheduled.step.bus_settle_until_us != 0U) {
         bus_settle_until_us_ = scheduled.step.bus_settle_until_us;
         if (scheduled.sensor == ScheduledSensor::Sht3x) {
             ms5611_.invalidate_after_shared_recovery(bus_settle_until_us_);
+            if (vl53l0x_.has_value()) {
+                vl53l0x_->invalidate_after_shared_recovery(bus_settle_until_us_);
+            }
         } else if (scheduled.sensor == ScheduledSensor::Ms5611) {
             sht3x_.invalidate_after_shared_recovery(bus_settle_until_us_);
+            if (vl53l0x_.has_value()) {
+                vl53l0x_->invalidate_after_shared_recovery(bus_settle_until_us_);
+            }
+        } else if (scheduled.sensor == ScheduledSensor::Vl53l0x) {
+            sht3x_.invalidate_after_shared_recovery(bus_settle_until_us_);
+            ms5611_.invalidate_after_shared_recovery(bus_settle_until_us_);
         }
     }
     return scheduled;
@@ -1252,8 +1273,12 @@ auto SharedSensorScheduler::next_deadline_us() const noexcept
     if (clock_.now_us() < bus_settle_until_us_) {
         return bus_settle_until_us_;
     }
-    return std::min(sht3x_.next_deadline_us(),
-                    ms5611_.next_deadline_us());
+    auto deadline = std::min(sht3x_.next_deadline_us(),
+                             ms5611_.next_deadline_us());
+    if (vl53l0x_.has_value()) {
+        deadline = std::min(deadline, vl53l0x_->next_deadline_us());
+    }
+    return deadline;
 }
 
 auto SharedSensorScheduler::sht3x() const noexcept
@@ -1266,6 +1291,11 @@ auto SharedSensorScheduler::ms5611() const noexcept
     return ms5611_;
 }
 
+auto SharedSensorScheduler::vl53l0x_array() const noexcept
+    -> const vl53l0x::ArrayDriver* {
+    return vl53l0x_.has_value() ? &*vl53l0x_ : nullptr;
+}
+
 auto SharedSensorScheduler::set_sht3x_interval_us(const std::uint32_t interval_us) noexcept
     -> bool {
     return sht3x_.set_sample_interval_us(interval_us);
@@ -1274,6 +1304,11 @@ auto SharedSensorScheduler::set_sht3x_interval_us(const std::uint32_t interval_u
 auto SharedSensorScheduler::set_ms5611_interval_us(const std::uint32_t interval_us) noexcept
     -> bool {
     return ms5611_.set_pressure_interval_us(interval_us);
+}
+
+auto SharedSensorScheduler::set_vl53l0x_interval_us(
+    const std::uint32_t interval_us) noexcept -> bool {
+    return vl53l0x_.has_value() && vl53l0x_->set_sample_interval_us(interval_us);
 }
 
 }  // namespace shahbaz::sensors::scheduler

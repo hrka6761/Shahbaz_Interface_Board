@@ -74,11 +74,32 @@ target_include_directories(sensor_ms5611_domain_test PRIVATE
     "${SHAHBAZ_ROOT}/components/sensor_ms5611/include"
 )
 
+shahbaz_test(sensor_vl53l0x_domain_test
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/test/vl53l0x_domain_test.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_domain.cpp"
+)
+target_include_directories(sensor_vl53l0x_domain_test PRIVATE
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/include"
+)
+
+shahbaz_test(sensor_vl53l0x_array_test
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/test/vl53l0x_array_test.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_array.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_domain.cpp"
+)
+target_include_directories(sensor_vl53l0x_array_test PRIVATE
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/include"
+    "${SHAHBAZ_ROOT}/components/interfaces/include"
+    "${SHAHBAZ_ROOT}/components/domain/include"
+)
+
 shahbaz_test(sensor_scheduler_test
     "${SHAHBAZ_ROOT}/components/sensor_scheduler/test/sensor_scheduler_test.cpp"
     "${SHAHBAZ_ROOT}/components/sensor_scheduler/src/sensor_scheduler.cpp"
     "${SHAHBAZ_ROOT}/components/sensor_sht30/src/sht3x_domain.cpp"
     "${SHAHBAZ_ROOT}/components/sensor_ms5611/src/ms5611_domain.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_array.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_domain.cpp"
 )
 target_include_directories(sensor_scheduler_test PRIVATE
     "${SHAHBAZ_ROOT}/components/sensor_scheduler/include"
@@ -86,6 +107,7 @@ target_include_directories(sensor_scheduler_test PRIVATE
     "${SHAHBAZ_ROOT}/components/domain/include"
     "${SHAHBAZ_ROOT}/components/sensor_sht30/include"
     "${SHAHBAZ_ROOT}/components/sensor_ms5611/include"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/include"
 )
 
 shahbaz_test(telemetry_protocol_test
@@ -138,6 +160,17 @@ target_include_directories(pwm_math_test PRIVATE
     "${SHAHBAZ_ROOT}/components/actuator_espidf/include"
 )
 
+shahbaz_test(espidf_motor_frame_test
+    "${SHAHBAZ_ROOT}/components/actuator_espidf/test/motor_frame_test.cpp"
+    "${SHAHBAZ_ROOT}/components/actuator_espidf/src/espidf_pwm_actuator_controller.cpp"
+)
+target_include_directories(espidf_motor_frame_test PRIVATE
+    "${SHAHBAZ_ROOT}/components/actuator_espidf/test/fake_idf"
+    "${SHAHBAZ_ROOT}/components/actuator_espidf/include"
+    "${SHAHBAZ_ROOT}/components/safety_supervisor/include"
+    "${SHAHBAZ_ROOT}/components/board_support/include"
+)
+
 shahbaz_test(device_link_test
     "${SHAHBAZ_ROOT}/components/device_link/test/device_link_test.cpp"
     "${SHAHBAZ_ROOT}/components/device_link/src/device_frame_sender.cpp"
@@ -148,6 +181,8 @@ shahbaz_test(device_link_test
     "${SHAHBAZ_ROOT}/components/sensor_scheduler/src/sensor_scheduler.cpp"
     "${SHAHBAZ_ROOT}/components/sensor_sht30/src/sht3x_domain.cpp"
     "${SHAHBAZ_ROOT}/components/sensor_ms5611/src/ms5611_domain.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_array.cpp"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/src/vl53l0x_domain.cpp"
     "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/cobs.cpp"
     "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/crc32c.cpp"
     "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/frame_accumulator.cpp"
@@ -160,6 +195,7 @@ target_include_directories(device_link_test PRIVATE
     "${SHAHBAZ_ROOT}/components/sensor_scheduler/include"
     "${SHAHBAZ_ROOT}/components/sensor_sht30/include"
     "${SHAHBAZ_ROOT}/components/sensor_ms5611/include"
+    "${SHAHBAZ_ROOT}/components/sensor_vl53l0x/include"
     "${SHAHBAZ_ROOT}/components/telemetry_protocol/include"
     "${SHAHBAZ_ROOT}/components/interfaces/include"
     "${SHAHBAZ_ROOT}/components/domain/include"

@@ -26,6 +26,9 @@ enum class BoardValidationIssue : std::uint32_t {
     ModuleIdentityUnverified = 1U << 13U,
     InvalidActuatorPinConfiguration = 1U << 14U,
     ActuatorEvidenceMissing = 1U << 15U,
+    RangefinderEvidenceMissing = 1U << 16U,
+    InvalidRangefinderPinConfiguration = 1U << 17U,
+    RangefinderActuatorPinConflict = 1U << 18U,
 };
 
 struct BoardValidationReport final {

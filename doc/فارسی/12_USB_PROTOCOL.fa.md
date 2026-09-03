@@ -58,6 +58,7 @@ u64 session_token
 - <code dir="ltr">MotorCommand</code>
 - <code dir="ltr">ServoCommand</code>
 - <code dir="ltr">SetControlMode</code>
+- <code dir="ltr">MotorFrameCommand</code>
 
 <code dir="ltr">DeviceInfoRequest</code>، <code dir="ltr">DeviceStatusRequest</code>، <code dir="ltr">Ping</code> و <code dir="ltr">TimeSyncRequest</code> برای عیب‌یابی/ایجاد <code dir="ltr">Session</code> بدون <code dir="ltr">Token</code> باقی می‌مانند.
 
@@ -94,11 +95,38 @@ u8  actuators_enabled_by_config
 
 در <code dir="ltr">Build</code> پیش‌فرض <code dir="ltr">Sensor</code>/<code dir="ltr">USB</code>، <code dir="ltr">Protocol</code> ظرفیت منطقی طراحی‌شدهٔ 4 موتور و 2 <code dir="ltr">Servo</code> را گزارش می‌کند، اما تعداد کانال فعال صفر و <code dir="ltr">actuator_available=0</code> است. پروفایل پیش‌فرض <code dir="ltr">SHAHBAZ_ACTUATOR_BACKEND=null</code> کد خروجی فیزیکی و <code dir="ltr">LEDC</code> را از تصویر حذف می‌کند. در ساخت مجاز دارای خروجی، کانال‌ها فقط پس از موفقیت <code dir="ltr">LEDC PWM Backend</code> و عبور از اعتبارسنجی برد و مدرک <code dir="ltr">Actuator</code> فعال می‌شوند.
 
+بیت‌های مربوط به فاصله‌سنج در <code dir="ltr">board_validation_issue_mask</code> عبارت‌اند از:
+
+```text
+bit 16 = VL53L0X sensor/XSHUT evidence missing
+bit 17 = invalid VL53L0X XSHUT GPIO configuration
+bit 18 = VL53L0X XSHUT overlaps an enabled actuator GPIO
+```
+
+این بیت‌ها هنگامی ارزیابی می‌شوند که قابلیت فاصله‌سنج درخواست شده باشد. نبود این بیت‌ها در <code dir="ltr">Build</code> دارای <code dir="ltr">CONFIG_SHAHBAZ_VL53L0X_ENABLE=n</code> به معنی فعال‌بودن فاصله‌سنج نیست. <code dir="ltr">Protocol v2</code> بایت قابلیت جداگانه‌ای برای فاصله‌سنج ندارد؛ <code dir="ltr">Client</code> از وضعیت چرخهٔ هر نقش در <code dir="ltr">DeviceStatusResponse</code> استفاده می‌کند و همچنان باید <code dir="ltr">Telemetry</code> غایب یا کهنه را برای کنترل غیرقابل‌استفاده بداند.
+
 ## فرمان‌های <code dir="ltr">Actuator</code>
 
 خروجی فیزیکی <code dir="ltr">PWM</code> به‌صورت پیش‌فرض غیرفعال است. فعال‌سازی آن به <code dir="ltr">SHAHBAZ_ACTUATOR_BACKEND=espidf</code>، <code dir="ltr">CONFIG_SHAHBAZ_ACTUATORS_ENABLE=y</code>، پرچم بررسی فیزیکی، رکورد مدرک مجاز، <code dir="ltr">GPIO</code>های یکتا و معتبر و موفقیت اعتبارسنجی زمان اجرا نیاز دارد.
 
-در حالت مسلح، دست‌کم یک فرمان پذیرفته‌شدهٔ موتور، <code dir="ltr">Servo</code> یا <code dir="ltr">Actuator</code> عمومی باید <code dir="ltr">Control-command Watchdog</code> مستقل را حداکثر هر <code dir="ltr">250 ms</code> تازه کند. <code dir="ltr">Heartbeat</code> و <code dir="ltr">SetControlMode</code> این زمان را تازه نمی‌کنند. پایان مهلت فوراً خروجی امن را اعمال و دلیل ایمنی مربوط را قفل می‌کند.
+پس از پیشوند <code dir="ltr">Session Token</code>، شکل منطقی فرمان‌های تولید چنین است:
+
+```text
+ArmRequest       empty
+ArmConfirm       empty
+ServoCommand     u8 servo_channel, u16 pulse_us
+SetControlMode   u8 mode
+MotorFrameCommand
+                 u8 count (=4), then four (u8 channel, u16 pulse_us) entries
+```
+
+<code dir="ltr">MotorFrameCommand</code> پیام <code dir="ltr">0x8014</code> و دارای <code dir="ltr">Payload</code> ثابت 13 بایتی است. شناسه‌های کانال باید دقیقاً یک‌بار و به ترتیب کانونی <code dir="ltr">0,1,2,3</code> حضور داشته باشند و هر مقدار <code dir="ltr">little-endian pulse</code> از مرزهای موتور عبور کند. <code dir="ltr">Firmware</code> کل <code dir="ltr">Payload</code> را پیش از فراخوانی بخش خروجی بررسی می‌کند. موفقیت دقیقاً یک <code dir="ltr">CommandAck</code> با شماره توالی همان درخواست و کد اقدام <code dir="ltr">18</code> می‌سازد. خطای بخش خروجی همه خروجی‌ها را ایمن، خطای <code dir="ltr">Actuator</code> را قفل و به‌جای پاسخ موفق یک <code dir="ltr">CommandNack</code> تولید می‌کند.
+
+بخش <code dir="ltr">LEDC</code> همه چهار مقدار را ابتدا محاسبه و آماده می‌کند، سپس <code dir="ltr">ledc_update_duty</code> را به‌ترتیب صدا می‌زند. این یک <code dir="ltr">Transaction</code> منسجم در <code dir="ltr">Protocol/Application</code> با رفتار تماماً ایمن هنگام خطاست، نه ادعای هم‌زمانی لبه‌های الکتریکی چهار خروجی.
+
+شکل‌های قدیمی <code dir="ltr">MotorCommand</code> و <code dir="ltr">ActuatorCommand</code> با هدف موتور فقط برای سازگاری سیمی شناخته می‌شوند. <code dir="ltr">Firmware</code> پیش‌فرض/تولیدی آن‌ها را پیش از تازه‌کردن زمان ایمنی، ثبت شماره توالی یا رسیدن به خروجی رد می‌کند. فقط پروفایل رومیزی مهاجرت با <code dir="ltr">CONFIG_SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS=y</code> می‌تواند آن‌ها را بپذیرد و نباید در پرواز استفاده شود. <code dir="ltr">ServoCommand</code> مستقل و <code dir="ltr">ActuatorCommand</code> با هدف <code dir="ltr">Servo</code> همچنان موجود است.
+
+در حالت مسلح، دست‌کم یک <code dir="ltr">MotorFrameCommand</code> منسجم یا فرمان پذیرفته‌شدهٔ <code dir="ltr">Servo</code> باید <code dir="ltr">Control-command Watchdog</code> مستقل را حداکثر هر <code dir="ltr">250 ms</code> تازه کند. <code dir="ltr">Heartbeat</code> و <code dir="ltr">SetControlMode</code> این زمان را تازه نمی‌کنند. پایان زمان فوراً خروجی امن را اعمال و دلیل ایمنی مربوط را قفل می‌کند.
 
 ## پیام‌های اصلی
 
@@ -112,6 +140,17 @@ u8  actuators_enabled_by_config
 - <code dir="ltr">CommandAck / CommandNack</code>
 - فرمان‌های <code dir="ltr">Actuator/Control</code> که در پیکربندی رومیزی فعلی به‌صورت پیش‌فرض غیرفعال‌اند
 
+<code dir="ltr">Firmware</code> فعلی پاسخ 10 بایتی <code dir="ltr">DeviceStatusResponse</code> می‌فرستد. بایت‌های 0 تا 5 همان وضعیت قدیمی ایمنی، ارتباط، فعال‌بودن <code dir="ltr">Telemetry</code>، مسلح‌بودن <code dir="ltr">Actuator</code>، آنلاین‌بودن <code dir="ltr">SHT30</code> و آنلاین‌بودن <code dir="ltr">MS5611</code> هستند. بایت‌های 6 تا 9 به‌ترتیب وضعیت چرخهٔ ثابت <code dir="ltr">Ground</code>، <code dir="ltr">Up</code>، <code dir="ltr">Front-left</code> و <code dir="ltr">Front-right VL53L0X</code> را می‌افزایند:
+
+```text
+0 = disabled or hardware presence unknown
+1 = configured and initializing
+2 = live
+3 = degraded/offline after configuration, XSHUT, I2C, timeout, or recovery fault
+```
+
+<code dir="ltr">Client</code> همچنان باید شکل قدیمیِ دقیقاً 6 بایتی را بپذیرد، اما نبود چهار بایت افزوده یعنی وضعیت چرخه نامعلوم است، نه اینکه نبود فاصله‌سنج اثبات شده باشد. هر طول یا مقدار چرخهٔ دیگر بدساخت است. مقدار <code dir="ltr">LIVE</code> فقط وضعیت چرخهٔ کد را گزارش می‌کند؛ هر نمونه همچنان باید بررسی مستقل وضعیت فاصله، اعتبار، کیفیت، شماره توالی و تازگی را بگذراند.
+
 ## <code dir="ltr">SensorSample</code>
 
 شناسه‌های فعلی:
@@ -119,7 +158,13 @@ u8  actuators_enabled_by_config
 ```text
 sensor 1 = SHT30
 sensor 2 = MS5611
-instance = 0
+sensor 3 = VL53L0X
+
+SHT30/MS5611 instance = 0
+VL53L0X instance 0 = Ground/downward
+VL53L0X instance 1 = Upward
+VL53L0X instance 2 = Front-left
+VL53L0X instance 3 = Front-right
 ```
 
 قالب <code dir="ltr">SensorSample</code> با رفتن به <code dir="ltr">Protocol v2</code> تغییر نکرده است:
@@ -136,7 +181,54 @@ u8  field_count
 repeated field_count times: u8 field_id, u8 field_type, u32 raw_value
 ```
 
-<code dir="ltr">SHT30</code> دمای محیط و رطوبت نسبی را گزارش می‌کند. <code dir="ltr">MS5611</code> فشار و دمای داخلی را گزارش می‌کند. در مسیر عملیاتی، **نرم‌افزار شهباز در <code dir="ltr">Android</code>** مالک <code dir="ltr">QNH</code> است و ارتفاع را از فشار محاسبه می‌کند. <code dir="ltr">Windows HIL</code> فقط برای عیب‌یابی مستقل می‌تواند همین محاسبه را تکرار کند.
+نوع فیلد <code dir="ltr">1</code> عدد صحیح علامت‌دار 32 بیتی و نوع <code dir="ltr">2</code> عدد صحیح بدون علامت 32 بیتی است. فیلدهای فعلی:
+
+```text
+1 = ambient temperature, signed milli-degrees Celsius
+2 = relative humidity, unsigned milli-percent
+3 = compensated pressure, signed pascal
+4 = internal temperature, signed milli-degrees Celsius
+5 = distance, unsigned millimetres
+6 = raw VL53L0X range status, unsigned
+7 = VL53L0X Shahbaz control-eligibility quality, unsigned percent
+```
+
+<code dir="ltr">SHT30</code> فیلدهای 1 و 2 و <code dir="ltr">MS5611</code> فیلدهای 3 و 4 را گزارش می‌کند. در مسیر عملیاتی، **نرم‌افزار شهباز در <code dir="ltr">Android</code>** مالک <code dir="ltr">QNH</code> است و ارتفاع را از فشار محاسبه می‌کند. <code dir="ltr">Windows HIL</code> فقط برای عیب‌یابی مستقل می‌تواند همین محاسبه را تکرار کند.
+
+هر نمونهٔ <code dir="ltr">VL53L0X</code> فیلدهای 5، 6 و 7 را گزارش می‌کند. همه قطعات با آدرس هفت‌بیتی <code dir="ltr">0x29</code> روشن می‌شوند؛ <code dir="ltr">Firmware</code> با چهار خط مستقل <code dir="ltr">XSHUT</code> آدرس‌های <code dir="ltr">0x30..0x33</code> را به ترتیب نقش ثابت بالا اختصاص می‌دهد. این قابلیت تا عبور از شرط‌های مدرک <code dir="ltr">Sensor/XSHUT</code> به‌صورت پیش‌فرض غیرفعال است.
+
+وضعیت خام فاصله از <code dir="ltr">RESULT_RANGE_STATUS[6:3]</code> می‌آید. وضعیت‌های <code dir="ltr">0</code> و <code dir="ltr">11</code> برای کنترل پذیرفته می‌شوند. خطاهای نام‌گذاری‌شده <code dir="ltr">1 sigma</code>، <code dir="ltr">2 signal</code>، <code dir="ltr">3 minimum range</code>، <code dir="ltr">4 phase</code> و <code dir="ltr">5 hardware</code> هستند و بقیه نامعلوم‌اند. <code dir="ltr">Firmware</code> فقط فاصلهٔ 30 تا 2000 میلی‌متر را برای کنترل قابل‌استفاده می‌داند. فیلد 7 تنها هنگامی <code dir="ltr">100</code> است که وضعیت و فاصله هر دو از این سیاست عبور کنند؛ این فیلد اندازه‌گیری توان سیگنال نوری نیست.
+
+```text
+validity bit 0 = TransportValid
+validity bit 1 = CrcValid                 # not set for VL53L0X results
+validity bit 2 = CalibrationValid
+validity bit 3 = TimingValid
+validity bit 4 = PlausibilityValid        # only status 0/11 and 30..2000 mm
+
+quality bit 0 = Fresh
+quality bit 1 = RecoveredAfterError
+quality bit 2 = RateLimited
+
+VL53L0X health bit 0 = invalid range status
+VL53L0X health bit 1 = distance outside 30..2000 mm
+```
+
+فاصله/وضعیت خام حتی هنگام شکست باورپذیری منتشر می‌شود تا عیب‌یابی ممکن بماند. مصرف‌کنندهٔ کنترل پرواز باید همه بیت‌های مورد انتظار، سلامت، وضعیت، کیفیت، شماره توالی و تازگی را بررسی کند و نمونه ردشده را بی‌صدا برای کنترل به کار نبرد. وضعیت چرخه خطاهای راه‌اندازی/تلاش دوباره را خلاصه می‌کند؛ هر وضعیت غیر از <code dir="ltr">LIVE</code> یا هر نمونه غایب/کهنه برای کنترل غیرقابل‌استفاده است.
+
+نمونهٔ <code dir="ltr">Ground</code> فقط یک مشاهده است. برد از فاصله به‌تنهایی فرود یا خلع سلاح را اعلام نمی‌کند. <code dir="ltr">Android</code> مالک تصحیح زاویه، بررسی پیوستگی/تازگی، سازگاری با تخمین‌گر و ترکیب با نشانه مستقل فرود است.
+
+### <code dir="ltr">SetSensorRate</code>
+
+پس از پیشوند <code dir="ltr">Session Token</code>، <code dir="ltr">SetSensorRate</code> شامل این داده است:
+
+```text
+u8  sensor_id
+u8  instance_id
+u32 interval_us
+```
+
+<code dir="ltr">Sensor</code>های 1 و 2 فقط <code dir="ltr">instance 0</code> را می‌پذیرند. <code dir="ltr">Sensor 3</code> مقدارهای 0 تا 3 و بازه 60,000 تا 10,000,000 میکروثانیه را می‌پذیرد. هر چهار <code dir="ltr">VL53L0X</code> عمداً یک آهنگ منصفانهٔ مشترک دارند؛ انتخاب هر <code dir="ltr">instance</code> معتبر آهنگ کل آرایه را تغییر می‌دهد.
 
 ## رفتار الزامی <code dir="ltr">Android/Shahbaz Client</code>
 
@@ -146,6 +238,8 @@ repeated field_count times: u8 field_id, u8 field_type, u32 raw_value
 - در <code dir="ltr">Session</code>های طولانی، <code dir="ltr">TimeSync</code> دوره‌ای انجام شود تا <code dir="ltr">Clock Drift</code> با فاصله مطمئن داخل پنجره تازگی بماند.
 - <code dir="ltr">SessionMismatch</code>، <code dir="ltr">StaleOrExpired</code>، خطای <code dir="ltr">CRC</code> و خطای شماره توالی باید رد قطعی فرمان تلقی شوند، نه مجوز ارسال دوباره داده قدیمی.
 - در اتصال مجدد، وضعیت فرمان/<code dir="ltr">Session</code> سمت <code dir="ltr">Client</code> نیز مانند دستگاه پاک شود.
+- فرمان <code dir="ltr">Arming</code>، <code dir="ltr">MotorFrameCommand</code> منسجم یا <code dir="ltr">Servo</code> فقط هنگامی ارسال شود که <code dir="ltr">DeviceInfoResponse</code> مقدار <code dir="ltr">actuator_available=1</code>، دست‌کم چهار کانال موتور فعال و تصمیم <code dir="ltr">Arming</code> سطح نرم‌افزار را تأیید کرده باشد.
+- هنگام مسلح‌بودن، ترافیک تازهٔ <code dir="ltr">Heartbeat/TimeSync</code> و <code dir="ltr">MotorFrameCommand</code> منسجم ادامه یابد؛ <code dir="ltr">Heartbeat</code> به‌تنهایی خروجی آخر را فعال نگه نمی‌دارد.
 
 هر تغییر بعدی <code dir="ltr">Protocol</code> باید هم‌زمان تست‌های <code dir="ltr">C++</code>، تست‌های <code dir="ltr">Kotlin Protocol/Session</code>، کد یکپارچه‌سازی <code dir="ltr">Android</code>، <code dir="ltr">Python HIL/self-test</code> و این سند را به‌روزرسانی کند. <code dir="ltr">tools/validate_firmware_contract.py</code> بررسی می‌کند که نسخه‌های <code dir="ltr">C++</code>، <code dir="ltr">Kotlin</code> و <code dir="ltr">Python</code> بی‌صدا از هم جدا نشوند.
 

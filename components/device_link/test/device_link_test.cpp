@@ -60,16 +60,41 @@ class FakeActuator final : public safety::IActuatorController {
     safety::ActuatorKind last_kind{safety::ActuatorKind::Motor};
     std::uint8_t last_channel{};
     std::uint16_t last_pulse{};
-    void forceSafe(safety::SafeStopReason) noexcept override { is_armed=false; enabled=false; }
+    void forceSafe(safety::SafeStopReason reason) noexcept override {
+        ++safe_calls;
+        last_safe_reason = reason;
+        is_armed=false;
+        enabled=false;
+    }
     [[nodiscard]] auto arm() noexcept -> safety::ActuatorStatus override { is_armed=true; enabled=false; return safety::ActuatorStatus::Ok; }
     [[nodiscard]] auto writePulseUs(safety::ActuatorKind kind, std::uint8_t channel,
                                     std::uint16_t pulse) noexcept -> safety::ActuatorStatus override {
+        ++pulse_write_calls;
         if (!is_armed) return safety::ActuatorStatus::NotArmed;
         last_kind=kind; last_channel=channel; last_pulse=pulse; enabled=true; return safety::ActuatorStatus::Ok;
+    }
+    [[nodiscard]] auto writeMotorFrame(
+        const safety::QuadMotorPulseFrame& pulse_us) noexcept
+        -> safety::ActuatorStatus override {
+        ++motor_frame_calls;
+        if (!is_armed) return safety::ActuatorStatus::NotArmed;
+        if (motor_frame_result != safety::ActuatorStatus::Ok) {
+            forceSafe(safety::SafeStopReason::Fault);
+            return motor_frame_result;
+        }
+        last_motor_frame = pulse_us;
+        enabled = true;
+        return safety::ActuatorStatus::Ok;
     }
     [[nodiscard]] auto outputsEnabled() const noexcept -> bool override { return enabled; }
     [[nodiscard]] auto armed() const noexcept -> bool override { return is_armed; }
     [[nodiscard]] auto available() const noexcept -> bool override { return true; }
+    safety::QuadMotorPulseFrame last_motor_frame{};
+    safety::ActuatorStatus motor_frame_result{safety::ActuatorStatus::Ok};
+    std::uint32_t motor_frame_calls{};
+    std::uint32_t pulse_write_calls{};
+    std::uint32_t safe_calls{};
+    safety::SafeStopReason last_safe_reason{safety::SafeStopReason::Startup};
 };
 
 protocol::DecodedFrame decodeSent(const FakeTransport::Sent& sent) {
@@ -100,6 +125,19 @@ std::vector<std::uint8_t> sessionPayload(const std::uint64_t session_token,
         out[i] = static_cast<std::uint8_t>((session_token >> (8U * i)) & 0xFFU);
     }
     for (std::size_t i = 0U; i < payload.size(); ++i) out[8U + i] = payload[i];
+    return out;
+}
+
+std::vector<std::uint8_t> motorFramePayload(
+    const safety::QuadMotorPulseFrame& pulse_us) {
+    std::vector<std::uint8_t> out(13U, 0U);
+    out[0] = static_cast<std::uint8_t>(safety::kQuadMotorCount);
+    for (std::size_t index = 0U; index < pulse_us.size(); ++index) {
+        const auto offset = 1U + index * 3U;
+        out[offset] = static_cast<std::uint8_t>(index);
+        out[offset + 1U] = static_cast<std::uint8_t>(pulse_us[index] & 0xFFU);
+        out[offset + 2U] = static_cast<std::uint8_t>((pulse_us[index] >> 8U) & 0xFFU);
+    }
     return out;
 }
 
@@ -222,15 +260,16 @@ bool testProtocolEndToEnd() {
     CHECK(engine.sessionToken() == kSession1);
 
     // Session-bound traffic without the negotiated token is rejected first.
-    feed(engine, request(protocol::MessageType::MotorCommand, 1U,
-                         {0U, 0xE8U, 0x03U}, clock.now));
+    const safety::QuadMotorPulseFrame first_frame{{1000U, 1100U, 1500U, 1300U}};
+    feed(engine, request(protocol::MessageType::MotorFrameCommand, 1U,
+                         motorFramePayload(first_frame), clock.now));
     auto reply = decodeSent(transport.sent.back());
     CHECK(reply.header.message_type == protocol::MessageType::CommandNack);
     CHECK(engine.statistics().session_rejects == 1U);
 
     // A valid session token is still insufficient before time synchronization.
-    feed(engine, request(protocol::MessageType::MotorCommand, 1U,
-                         sessionPayload(kSession1, {0U, 0xE8U, 0x03U}), clock.now));
+    feed(engine, request(protocol::MessageType::MotorFrameCommand, 1U,
+                         sessionPayload(kSession1, motorFramePayload(first_frame)), clock.now));
     reply = decodeSent(transport.sent.back());
     CHECK(reply.header.message_type == protocol::MessageType::CommandNack);
 
@@ -257,21 +296,26 @@ bool testProtocolEndToEnd() {
     CHECK(decodeSent(transport.sent.back()).header.message_type == protocol::MessageType::CommandAck);
 
     clock.now += 100U;
-    feed(engine, request(protocol::MessageType::MotorCommand, 5U,
-                         sessionPayload(kSession1, {2U, 0xDCU, 0x05U}), clock.now)); // 1500 us
-    CHECK(actuator.last_kind == safety::ActuatorKind::Motor && actuator.last_channel == 2U && actuator.last_pulse == 1500U);
+    feed(engine, request(protocol::MessageType::MotorFrameCommand, 5U,
+                         sessionPayload(kSession1, motorFramePayload(first_frame)), clock.now));
+    CHECK(actuator.motor_frame_calls == 1U);
+    CHECK(actuator.pulse_write_calls == 0U);
+    CHECK(actuator.last_motor_frame == first_frame);
     CHECK(decodeSent(transport.sent.back()).header.message_type == protocol::MessageType::CommandAck);
 
     // A sender timestamp outside the configured age window is rejected and
     // cannot update actuator output even with a valid sequence and token.
-    const auto pulse_before = actuator.last_pulse;
+    const auto frame_before = actuator.last_motor_frame;
+    const auto frame_calls_before = actuator.motor_frame_calls;
+    const safety::QuadMotorPulseFrame stale_frame{{1600U, 1600U, 1600U, 1600U}};
     clock.now += 400U;
-    feed(engine, request(protocol::MessageType::MotorCommand, 6U,
-                         sessionPayload(kSession1, {1U, 0x40U, 0x06U}),
+    feed(engine, request(protocol::MessageType::MotorFrameCommand, 6U,
+                         sessionPayload(kSession1, motorFramePayload(stale_frame)),
                          clock.now - 400U));
     reply = decodeSent(transport.sent.back());
     CHECK(reply.header.message_type == protocol::MessageType::CommandNack);
-    CHECK(actuator.last_pulse == pulse_before);
+    CHECK(actuator.last_motor_frame == frame_before);
+    CHECK(actuator.motor_frame_calls == frame_calls_before);
     CHECK(engine.statistics().freshness_rejects >= 1U);
 
     // Fresh command with the same sequence is accepted because the stale frame
@@ -297,20 +341,33 @@ bool testProtocolEndToEnd() {
     CHECK(reply.payload[16] == 4U && reply.payload[17] == 2U);
     CHECK(reply.payload[18] == 1U && reply.payload[19] == 1U);
 
+    // The extended status preserves the six legacy bytes and explicitly reports every
+    // rangefinder role disabled/unknown when no array is composed.
     clock.now += 10U;
-    feed(engine, request(protocol::MessageType::Disarm, 8U, {}, clock.now));
+    feed(engine, request(protocol::MessageType::DeviceStatusRequest, 8U, {}, clock.now));
+    reply = decodeSent(transport.sent.back());
+    CHECK(reply.header.message_type == protocol::MessageType::DeviceStatusResponse);
+    CHECK(reply.payload_size == 10U);
+    CHECK(reply.payload[0] == static_cast<std::uint8_t>(safety::SafetyState::Armed));
+    CHECK(reply.payload[3] == 1U);
+    for (std::size_t instance = 0U; instance < 4U; ++instance) {
+        CHECK(reply.payload[6U + instance] == 0U);
+    }
+
+    clock.now += 10U;
+    feed(engine, request(protocol::MessageType::Disarm, 9U, {}, clock.now));
     CHECK(safety.state() == safety::SafetyState::Disarmed);
     CHECK(!actuator.outputsEnabled());
 
     // Parser rejects corruption and resynchronizes on the next valid frame.
-    auto corrupt = request(protocol::MessageType::Ping, 9U, sync_token, clock.now);
+    auto corrupt = request(protocol::MessageType::Ping, 10U, sync_token, clock.now);
     CHECK(corrupt.size() > 4U);
     corrupt[corrupt.size() - 3U] ^= 0x01U;
     const auto rejected_before = engine.statistics().frames_rejected;
     feed(engine, corrupt);
     CHECK(engine.statistics().frames_rejected > rejected_before);
     clock.now += 10U;
-    feed(engine, request(protocol::MessageType::Ping, 9U, sync_token, clock.now));
+    feed(engine, request(protocol::MessageType::Ping, 10U, sync_token, clock.now));
     CHECK(decodeSent(transport.sent.back()).header.message_type == protocol::MessageType::Pong);
 
     // Reconnect creates a new protocol-session boundary: stale session-1 control bytes
@@ -336,10 +393,127 @@ bool testProtocolEndToEnd() {
     return true;
 }
 
+bool testMotorFrameHasOneApplyAndOneReplyWithAllOrSafeFailure() {
+    constexpr std::uint64_t kSession = UINT64_C(0x1020304050607080);
+    const safety::QuadMotorPulseFrame expected{{1000U, 1250U, 1750U, 2000U}};
+
+    {
+        FakeClock clock{};
+        FakeTransport transport{};
+        FakeI2c bus{};
+        FakeActuator actuator{};
+        safety::SafetySupervisor safety{actuator, safety::SafetyConfig{1'000'000U}};
+        CHECK(safety.completeInitialization(clock.now));
+        link::DeviceFrameSender sender{transport, clock};
+        link::SensorTelemetryPublisher publisher{sender};
+        sensors::scheduler::SharedSensorScheduler sensors{bus, clock, publisher};
+        command::CommandDispatcher dispatcher{safety, command::DispatcherConfig{}};
+        link::ProtocolEngine engine{dispatcher, safety, actuator, sensors, publisher, sender,
+                                    clock, {}, {250U, 20U}};
+        engine.setConnected(true, kSession);
+
+        const std::vector<std::uint8_t> sync_payload(8U, 0x5AU);
+        feed(engine, request(protocol::MessageType::TimeSyncRequest, 1U,
+                             sync_payload, clock.now));
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::Heartbeat, 2U,
+                             sessionPayload(kSession), clock.now));
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::ArmRequest, 3U,
+                             sessionPayload(kSession), clock.now));
+        CHECK(safety.state() == safety::SafetyState::Armed);
+
+        // The production/default dispatcher rejects both individual-motor
+        // wire paths before they refresh safety timestamps or reach hardware.
+        const auto valid_frame_before = safety.freshness().valid_frame.monotonic_us;
+        const auto valid_control_before =
+            safety.freshness().valid_control_command.monotonic_us;
+        const auto legacy_replies_before = transport.sent.size();
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::MotorCommand, 4U,
+                             sessionPayload(kSession, {0U, 0xE8U, 0x03U}),
+                             clock.now));
+        CHECK(transport.sent.size() == legacy_replies_before + 1U);
+        CHECK(decodeSent(transport.sent.back()).header.message_type ==
+              protocol::MessageType::CommandNack);
+        CHECK(actuator.pulse_write_calls == 0U);
+        CHECK(actuator.motor_frame_calls == 0U);
+        CHECK(safety.freshness().valid_frame.monotonic_us == valid_frame_before);
+        CHECK(safety.freshness().valid_control_command.monotonic_us ==
+              valid_control_before);
+
+        const auto replies_before = transport.sent.size();
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::MotorFrameCommand, 4U,
+                             sessionPayload(kSession, motorFramePayload(expected)),
+                             clock.now));
+        CHECK(actuator.motor_frame_calls == 1U);
+        CHECK(actuator.pulse_write_calls == 0U);
+        CHECK(actuator.last_motor_frame == expected);
+        CHECK(actuator.outputsEnabled());
+        CHECK(transport.sent.size() == replies_before + 1U);
+        const auto reply = decodeSent(transport.sent.back());
+        CHECK(reply.header.message_type == protocol::MessageType::CommandAck);
+        CHECK(reply.payload_size == 5U);
+        CHECK(reply.payload[4] == 18U);
+    }
+
+    {
+        FakeClock clock{};
+        FakeTransport transport{};
+        FakeI2c bus{};
+        FakeActuator actuator{};
+        safety::SafetySupervisor safety{actuator, safety::SafetyConfig{1'000'000U}};
+        CHECK(safety.completeInitialization(clock.now));
+        link::DeviceFrameSender sender{transport, clock};
+        link::SensorTelemetryPublisher publisher{sender};
+        sensors::scheduler::SharedSensorScheduler sensors{bus, clock, publisher};
+        command::CommandDispatcher dispatcher{safety, command::DispatcherConfig{}};
+        link::ProtocolEngine engine{dispatcher, safety, actuator, sensors, publisher, sender,
+                                    clock, {}, {250U, 20U}};
+        engine.setConnected(true, kSession);
+
+        const std::vector<std::uint8_t> sync_payload(8U, 0xA5U);
+        feed(engine, request(protocol::MessageType::TimeSyncRequest, 1U,
+                             sync_payload, clock.now));
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::Heartbeat, 2U,
+                             sessionPayload(kSession), clock.now));
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::ArmRequest, 3U,
+                             sessionPayload(kSession), clock.now));
+        CHECK(safety.state() == safety::SafetyState::Armed);
+
+        actuator.motor_frame_result = safety::ActuatorStatus::HardwareError;
+        const auto replies_before = transport.sent.size();
+        clock.now += 10U;
+        feed(engine, request(protocol::MessageType::MotorFrameCommand, 4U,
+                             sessionPayload(kSession, motorFramePayload(expected)),
+                             clock.now));
+        CHECK(actuator.motor_frame_calls == 1U);
+        CHECK(actuator.pulse_write_calls == 0U);
+        CHECK(!actuator.armed());
+        CHECK(!actuator.outputsEnabled());
+        CHECK(actuator.last_safe_reason == safety::SafeStopReason::Fault);
+        CHECK(safety.state() == safety::SafetyState::Fault);
+        CHECK(safety.faultReason() == safety::FaultReason::ActuatorHardwareFailure);
+        CHECK(transport.sent.size() == replies_before + 1U);
+        const auto reply = decodeSent(transport.sent.back());
+        CHECK(reply.header.message_type == protocol::MessageType::CommandNack);
+        CHECK(reply.payload_size == 8U);
+        CHECK(reply.payload[4] ==
+              static_cast<std::uint8_t>(protocol::NackReason::InvalidState));
+        CHECK(reply.payload[6] ==
+              static_cast<std::uint8_t>(command::ValidationError::ActuatorRejected));
+    }
+    return true;
+}
+
 }  // namespace
 
 int main() {
     if (!testSenderAndPublisher() || !testTimeResyncRepairsAgedMapping() ||
-        !testProtocolEndToEnd()) return EXIT_FAILURE;
+        !testProtocolEndToEnd() ||
+        !testMotorFrameHasOneApplyAndOneReplyWithAllOrSafeFailure()) return EXIT_FAILURE;
     return EXIT_SUCCESS;
 }

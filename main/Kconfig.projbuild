@@ -11,4 +11,15 @@ config SHAHBAZ_ACTUATORS_ENABLE
         The board exposes four motor PWM outputs and two optional servo PWM
         outputs only after that gate succeeds.
 
+config SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS
+    bool "Allow legacy single-motor Protocol v2 commands (unsafe compatibility)"
+    default n
+    depends on SHAHBAZ_ACTUATORS_ENABLE
+    help
+        Keep disabled for every production and flight profile. When enabled,
+        the dispatcher accepts legacy MotorCommand and motor-targeted generic
+        ActuatorCommand messages that can change one rotor independently. This
+        option exists only for deliberate migration/bench compatibility; the
+        coherent MotorFrameCommand remains the required flight-control path.
+
 endmenu

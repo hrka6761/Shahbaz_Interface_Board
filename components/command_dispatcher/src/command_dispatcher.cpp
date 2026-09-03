@@ -15,6 +15,9 @@ constexpr std::size_t kSetSensorRatePayloadLength = 6U;
 constexpr std::size_t kDirectPulsePayloadLength = 3U;   // <BH>
 constexpr std::size_t kActuatorPayloadLength = 4U;      // <BBH>
 constexpr std::size_t kControlModePayloadLength = 1U;
+constexpr std::size_t kMotorFrameEntryLength = 3U;      // <BH>
+constexpr std::size_t kMotorFramePayloadLength =
+    1U + safety::kQuadMotorCount * kMotorFrameEntryLength;  // count + 4 x <BH>
 constexpr std::uint8_t kCurrentSensorInstance = 0U;
 
 struct EnvelopeResult final {
@@ -53,6 +56,7 @@ struct EnvelopeResult final {
         case MessageType::MotorCommand:
         case MessageType::ServoCommand:
         case MessageType::SetControlMode:
+        case MessageType::MotorFrameCommand:
             return true;
         default:
             return false;
@@ -83,6 +87,7 @@ struct EnvelopeResult final {
                 case MessageType::ActuatorCommand:
                 case MessageType::MotorCommand:
                 case MessageType::ServoCommand:
+                case MessageType::MotorFrameCommand:
                     return false;
                 default:
                     return true;
@@ -103,6 +108,7 @@ struct EnvelopeResult final {
                 case MessageType::MotorCommand:
                 case MessageType::ServoCommand:
                 case MessageType::SetControlMode:
+                case MessageType::MotorFrameCommand:
                     return true;
                 default:
                     return false;
@@ -269,6 +275,21 @@ auto CommandDispatcher::dispatch(const protocol::DecodedFrame& frame,
                         ValidationError::SenderTimeNotSynchronized);
     }
 
+    // Fail closed before touching supervisor freshness/state. MotorCommand and
+    // the motor form of generic ActuatorCommand can update only one rotor and
+    // would bypass the coherent Quad-X generation contract. The compatibility
+    // flag exists only for explicit legacy bench profiles and defaults false.
+    const bool legacy_motor_command = type == MessageType::MotorCommand;
+    const bool generic_individual_motor_command =
+        type == MessageType::ActuatorCommand &&
+        exactLength(frame, kActuatorPayloadLength) &&
+        frame.payload[0] == static_cast<std::uint8_t>(safety::ActuatorKind::Motor);
+    if (!config_.allow_legacy_individual_motor_commands &&
+        (legacy_motor_command || generic_individual_motor_command)) {
+        return makeNack(frame, NackReason::InvalidState,
+                        ValidationError::UnsupportedDirection);
+    }
+
     const bool frame_updated = safety_supervisor_.observeValidFrame(
         context.received_monotonic_us, context.dispatch_monotonic_us);
     if (!frame_updated) {
@@ -323,6 +344,12 @@ auto CommandDispatcher::dispatch(const protocol::DecodedFrame& frame,
             break;
         case MessageType::SetControlMode:
             if (!exactLength(frame, kControlModePayloadLength)) {
+                return makeNack(frame, NackReason::InvalidLength,
+                                ValidationError::InvalidPayloadLength, true);
+            }
+            break;
+        case MessageType::MotorFrameCommand:
+            if (!exactLength(frame, kMotorFramePayloadLength)) {
                 return makeNack(frame, NackReason::InvalidLength,
                                 ValidationError::InvalidPayloadLength, true);
             }
@@ -394,16 +421,24 @@ auto CommandDispatcher::dispatch(const protocol::DecodedFrame& frame,
             const auto raw_sensor_id = frame.payload[0];
             const auto instance_id = frame.payload[1];
             const auto interval_us = readLe32(frame.payload.data() + 2U);
-            const bool known = raw_sensor_id == static_cast<std::uint8_t>(SensorId::Sht3x) ||
-                               raw_sensor_id == static_cast<std::uint8_t>(SensorId::Ms5611);
-            if (!known || instance_id != kCurrentSensorInstance) {
+            const bool legacy_sensor =
+                raw_sensor_id == static_cast<std::uint8_t>(SensorId::Sht3x) ||
+                raw_sensor_id == static_cast<std::uint8_t>(SensorId::Ms5611);
+            const bool rangefinder =
+                raw_sensor_id == static_cast<std::uint8_t>(SensorId::Vl53l0x);
+            const bool valid_instance =
+                (legacy_sensor && instance_id == kCurrentSensorInstance) ||
+                (rangefinder && instance_id < 4U);
+            if ((!legacy_sensor && !rangefinder) || !valid_instance) {
                 return makeNack(frame, NackReason::MalformedMessage,
                                 ValidationError::InvalidPayloadValue, true);
             }
             const auto sensor_id = static_cast<SensorId>(raw_sensor_id);
             const auto& bounds = sensor_id == SensorId::Sht3x
-                                     ? config_.sht3x_interval
-                                     : config_.ms5611_interval;
+                ? config_.sht3x_interval
+                : (sensor_id == SensorId::Ms5611
+                       ? config_.ms5611_interval
+                       : config_.vl53l0x_interval);
             if (!bounds.contains(interval_us)) {
                 return makeNack(frame, NackReason::MalformedMessage,
                                 ValidationError::InvalidPayloadValue, true);
@@ -474,6 +509,40 @@ auto CommandDispatcher::dispatch(const protocol::DecodedFrame& frame,
                                   ApplicationAction::SetControlMode, true);
             result.control_mode = {frame.payload[0], true};
             break;
+        case MessageType::MotorFrameCommand: {
+            if (static_cast<std::size_t>(config_.motor_channels) != safety::kQuadMotorCount ||
+                static_cast<std::size_t>(frame.payload[0]) != safety::kQuadMotorCount) {
+                return makeNack(frame, NackReason::MalformedMessage,
+                                ValidationError::InvalidPayloadValue, true);
+            }
+
+            safety::QuadMotorPulseFrame pulse_us{};
+            for (std::size_t index = 0U; index < safety::kQuadMotorCount; ++index) {
+                const auto offset = 1U + index * kMotorFrameEntryLength;
+                // A canonical frame contains every channel exactly once, in
+                // ascending order. This rejects duplicates, omissions, and
+                // ambiguous alternate orderings before any output is touched.
+                if (frame.payload[offset] != static_cast<std::uint8_t>(index)) {
+                    return makeNack(frame, NackReason::MalformedMessage,
+                                    ValidationError::InvalidPayloadValue, true);
+                }
+                pulse_us[index] = readLe16(frame.payload.data() + offset + 1U);
+                if (!config_.motor_pulse.contains(pulse_us[index])) {
+                    return makeNack(frame, NackReason::MalformedMessage,
+                                    ValidationError::InvalidPayloadValue, true);
+                }
+            }
+
+            const auto sr = safety_supervisor_.handleActuatorCommand(
+                context.dispatch_monotonic_us);
+            if (sr != safety::SafetyCommandResult::AcceptedActuatorCommand) {
+                return mapSafetyReject(frame, sr, true);
+            }
+            result = makeAccepted(frame, ReplyKind::CommandAck,
+                                  ApplicationAction::MotorFrameCommand, true);
+            result.motor_frame = {pulse_us, true};
+            break;
+        }
         default:
             return makeNack(frame, NackReason::InvalidState,
                             ValidationError::UnsupportedDirection, true);
@@ -489,7 +558,7 @@ auto CommandDispatcher::dispatch(const protocol::DecodedFrame& frame,
     }
     if (type == MessageType::ArmRequest || type == MessageType::ArmConfirm ||
         type == MessageType::ActuatorCommand || type == MessageType::MotorCommand ||
-        type == MessageType::ServoCommand) {
+        type == MessageType::ServoCommand || type == MessageType::MotorFrameCommand) {
         if (!safety_supervisor_.observeValidControlCommand(context.received_monotonic_us,
                                                            context.dispatch_monotonic_us)) {
             return makeNack(frame, NackReason::InvalidState,

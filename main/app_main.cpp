@@ -17,6 +17,7 @@
 #include "shahbaz/platform/espidf_board_validator.hpp"
 #include "shahbaz/platform/espidf_i2c_bus.hpp"
 #include "shahbaz/platform/espidf_monotonic_clock.hpp"
+#include "shahbaz/platform/espidf_sensor_shutdown_bank.hpp"
 #include "shahbaz/safety/safety_supervisor.hpp"
 #include "shahbaz/sensors/sensor_scheduler.hpp"
 #include "shahbaz/usb/espidf_usb_cdc_transport.hpp"
@@ -74,6 +75,23 @@ void log_issue(const shahbaz::interfaces::BoardValidationReport& report,
 #endif
 }
 
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE
+[[nodiscard]] auto rangefinder_gate_open(
+    const shahbaz::interfaces::BoardValidationReport& report) noexcept -> bool {
+    using Issue = shahbaz::interfaces::BoardValidationIssue;
+    return !report.has(Issue::RangefinderEvidenceMissing) &&
+           !report.has(Issue::InvalidRangefinderPinConfiguration) &&
+           !report.has(Issue::RangefinderActuatorPinConflict);
+}
+
+[[nodiscard]] auto rangefinder_config(const bool enabled) noexcept
+    -> shahbaz::sensors::vl53l0x::ArrayConfig {
+    auto config = shahbaz::sensors::vl53l0x::ArrayConfig{};
+    config.enabled = enabled;
+    return config;
+}
+#endif
+
 #if defined(SHAHBAZ_BUILD_PHYSICAL_ACTUATORS)
 [[nodiscard]] auto actuator_output_gate_open(
     const shahbaz::interfaces::BoardValidationReport& report) noexcept -> bool {
@@ -95,6 +113,16 @@ void log_issue(const shahbaz::interfaces::BoardValidationReport& report,
         TaskHealthConfig{true, false, kCriticalServiceMaxSilenceUs},  // Telemetry service
         TaskHealthConfig{true, false, 1'000'000U},                    // Maintenance/logging
     }};
+}
+
+[[nodiscard]] constexpr auto dispatcher_config() noexcept
+    -> shahbaz::command::DispatcherConfig {
+    auto config = shahbaz::command::DispatcherConfig{};
+#if defined(CONFIG_SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS) && \
+    CONFIG_SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS
+    config.allow_legacy_individual_motor_commands = true;
+#endif
+    return config;
 }
 
 }  // namespace
@@ -129,6 +157,14 @@ extern "C" void app_main(void) {
               "sensor wiring evidence is not recorded; runtime I2C diagnostics will determine availability");
     log_issue(board_report, interfaces::BoardValidationIssue::ActuatorEvidenceMissing,
               "actuator GPIO review evidence is missing; physical PWM initialization is blocked");
+    log_issue(board_report, interfaces::BoardValidationIssue::RangefinderEvidenceMissing,
+              "VL53L0X XSHUT/sensor evidence is missing; all four rangefinders remain in shutdown");
+    log_issue(board_report,
+              interfaces::BoardValidationIssue::InvalidRangefinderPinConfiguration,
+              "VL53L0X XSHUT GPIO assignment is invalid; rangefinders remain blocked");
+    log_issue(board_report,
+              interfaces::BoardValidationIssue::RangefinderActuatorPinConflict,
+              "VL53L0X XSHUT overlaps an actuator GPIO; rangefinders remain blocked");
 
     static actuator::NullActuatorController null_actuator{};
     safety::IActuatorController* active_actuator = &null_actuator;
@@ -231,8 +267,45 @@ extern "C" void app_main(void) {
 
     static link::DeviceFrameSender frame_sender{usb_transport, clock};
     static link::SensorTelemetryPublisher telemetry{frame_sender};
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE
+    const bool rangefinder_authorized = rangefinder_gate_open(board_report);
+    static platform::EspIdfSensorShutdownBank rangefinder_shutdown{
+        platform::EspIdfSensorShutdownConfig{
+            {{CONFIG_SHAHBAZ_VL53L0X_GROUND_XSHUT_GPIO,
+              CONFIG_SHAHBAZ_VL53L0X_UP_XSHUT_GPIO,
+              CONFIG_SHAHBAZ_VL53L0X_FRONT_LEFT_XSHUT_GPIO,
+              CONFIG_SHAHBAZ_VL53L0X_FRONT_RIGHT_XSHUT_GPIO}},
+            CONFIG_SHAHBAZ_I2C_SDA_GPIO,
+            CONFIG_SHAHBAZ_I2C_SCL_GPIO,
+            rangefinder_authorized,
+        }};
+    const auto rangefinder_shutdown_status = rangefinder_authorized
+        ? rangefinder_shutdown.initialize()
+        : interfaces::ShutdownStatus::InvalidArgument;
+    const bool rangefinders_ready =
+        rangefinder_shutdown_status == interfaces::ShutdownStatus::Ok;
+    if (rangefinders_ready) {
+        ESP_LOGI(kLogTag,
+                 "VL53L0X XSHUT ready: ground=%d up=%d front_left=%d front_right=%d; addresses=0x30..0x33",
+                 CONFIG_SHAHBAZ_VL53L0X_GROUND_XSHUT_GPIO,
+                 CONFIG_SHAHBAZ_VL53L0X_UP_XSHUT_GPIO,
+                 CONFIG_SHAHBAZ_VL53L0X_FRONT_LEFT_XSHUT_GPIO,
+                 CONFIG_SHAHBAZ_VL53L0X_FRONT_RIGHT_XSHUT_GPIO);
+    } else {
+        ESP_LOGE(kLogTag,
+                 "VL53L0X feature requested but fail-closed gate/initialization rejected status=%u",
+                 static_cast<unsigned>(rangefinder_shutdown_status));
+    }
+    static sensors::scheduler::SharedSensorScheduler sensor_scheduler{
+        i2c, clock, telemetry, {}, {}, &rangefinder_shutdown,
+        // An authorized-but-failed XSHUT adapter is a configured degraded
+        // array, not an indistinguishable disabled/absent feature.
+        rangefinder_config(rangefinder_authorized)};
+#else
     static sensors::scheduler::SharedSensorScheduler sensor_scheduler{i2c, clock, telemetry};
-    static command::CommandDispatcher dispatcher{safety, command::DispatcherConfig{}};
+    ESP_LOGI(kLogTag, "four VL53L0X rangefinders disabled by safe-default configuration");
+#endif
+    static command::CommandDispatcher dispatcher{safety, dispatcher_config()};
     const link::DeviceRuntimeInfo runtime_info{
         board_report.detected_flash_bytes,
         board_report.detected_psram_bytes,

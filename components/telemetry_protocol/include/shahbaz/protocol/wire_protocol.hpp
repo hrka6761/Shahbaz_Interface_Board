@@ -69,6 +69,7 @@ enum class MessageType : std::uint16_t {
     MotorCommand = 0x8011U,
     ServoCommand = 0x8012U,
     SetControlMode = 0x8013U,
+    MotorFrameCommand = 0x8014U,
 };
 
 /** @brief Current-phase authorization policy after integrity decoding. */

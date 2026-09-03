@@ -7,6 +7,8 @@
  */
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 
 namespace shahbaz::board {
@@ -20,6 +22,7 @@ constexpr std::int32_t kUsbDataMinusGpio = 19;
 constexpr std::int32_t kUsbDataPlusGpio = 20;
 constexpr std::int32_t kDiagnosticUartTxGpio = 43;
 constexpr std::int32_t kDiagnosticUartRxGpio = 44;
+constexpr std::array<std::int32_t, 4U> kDefaultVl53l0xXshutGpio{{12, 13, 14, 15}};
 
 enum class BoardRevision : std::uint8_t {
     Unverified = 0,
@@ -88,6 +91,34 @@ struct UsbActivationEvidence final {
     return classify_gpio(gpio) == PinClassification::AvailableWithReview;
 }
 
+[[nodiscard]] constexpr auto is_valid_vl53l0x_xshut_pins(
+    const std::array<std::int32_t, 4U>& pins,
+    const std::int32_t i2c_sda = kDefaultI2cSdaGpio,
+    const std::int32_t i2c_scl = kDefaultI2cSclGpio) noexcept -> bool {
+    for (std::size_t index = 0U; index < pins.size(); ++index) {
+        if (classify_gpio(pins[index]) != PinClassification::AvailableWithReview ||
+            pins[index] == i2c_sda || pins[index] == i2c_scl) {
+            return false;
+        }
+        for (std::size_t other = index + 1U; other < pins.size(); ++other) {
+            if (pins[index] == pins[other]) return false;
+        }
+    }
+    return true;
+}
+
+template <std::size_t N>
+[[nodiscard]] constexpr auto vl53l0x_xshut_conflicts(
+    const std::array<std::int32_t, 4U>& xshut,
+    const std::array<std::int32_t, N>& other_pins) noexcept -> bool {
+    for (const auto sensor_pin : xshut) {
+        for (const auto other_pin : other_pins) {
+            if (sensor_pin == other_pin) return true;
+        }
+    }
+    return false;
+}
+
 [[nodiscard]] constexpr auto is_default_i2c_pair(const std::int32_t sda,
                                                   const std::int32_t scl) noexcept -> bool {
     return sda == kDefaultI2cSdaGpio && scl == kDefaultI2cSclGpio;
@@ -124,6 +155,7 @@ struct UsbActivationEvidence final {
 
 static_assert(is_valid_i2c_pair(kDefaultI2cSdaGpio, kDefaultI2cSclGpio));
 static_assert(is_actuator_gpio_candidate(4));
+static_assert(is_valid_vl53l0x_xshut_pins(kDefaultVl53l0xXshutGpio));
 static_assert(!is_actuator_gpio_candidate(19));
 static_assert(!is_actuator_gpio_candidate(35));
 static_assert(classify_gpio(19) == PinClassification::NativeUsbReserved);

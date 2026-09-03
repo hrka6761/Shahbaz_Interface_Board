@@ -4,11 +4,16 @@
 #include "shahbaz/safety/actuator_controller.hpp"
 #include "shahbaz/safety/safety_supervisor_interface.hpp"
 
+#include <array>
 #include <cstdint>
 
 namespace shahbaz::command {
 
-enum class SensorId : std::uint8_t { Sht3x = 1U, Ms5611 = 2U };
+enum class SensorId : std::uint8_t {
+    Sht3x = 1U,
+    Ms5611 = 2U,
+    Vl53l0x = 3U,
+};
 
 struct IntervalBounds final {
     std::uint32_t minimum_us{0U};
@@ -34,10 +39,19 @@ struct DispatcherConfig final {
     std::uint64_t maximum_local_dispatch_age_us{100'000U};
     IntervalBounds sht3x_interval{20'000U, 10'000'000U};
     IntervalBounds ms5611_interval{20'000U, 10'000'000U};
+    IntervalBounds vl53l0x_interval{60'000U, 10'000'000U};
     PulseBounds motor_pulse{};
     PulseBounds servo_pulse{500U, 2500U};
     std::uint8_t motor_channels{4U};
     std::uint8_t servo_channels{2U};
+    /**
+     * Compatibility escape hatch for pre-MotorFrameCommand clients.
+     *
+     * Production must leave this false: a MotorCommand or an
+     * ActuatorCommand targeting a motor changes only one rotor and therefore
+     * cannot preserve a coherent Quad-X generation.
+     */
+    bool allow_legacy_individual_motor_commands{false};
 };
 
 enum class SenderFreshness : std::uint8_t { Fresh, StaleOrExpired, NotSynchronized };
@@ -67,6 +81,7 @@ enum class ApplicationAction : std::uint8_t {
     ServoCommand,
     ActuatorCommand,
     SetControlMode,
+    MotorFrameCommand,
 };
 
 enum class ReplyKind : std::uint8_t {
@@ -117,6 +132,11 @@ struct ControlModeParameters final {
     bool present{false};
 };
 
+struct MotorFrameParameters final {
+    safety::QuadMotorPulseFrame pulse_us{};
+    bool present{false};
+};
+
 struct DispatchResult final {
     bool accepted{false};
     ReplyKind reply{ReplyKind::CommandNack};
@@ -131,6 +151,7 @@ struct DispatchResult final {
     SetSensorRateParameters sensor_rate{};
     ActuatorParameters actuator{};
     ControlModeParameters control_mode{};
+    MotorFrameParameters motor_frame{};
 };
 
 class CommandDispatcher final {

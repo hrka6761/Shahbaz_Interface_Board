@@ -58,6 +58,7 @@ followed by the logical message payload:
 - `MotorCommand`
 - `ServoCommand`
 - `SetControlMode`
+- `MotorFrameCommand`
 
 `DeviceInfoRequest`, `DeviceStatusRequest`, `Ping`, and `TimeSyncRequest` remain tokenless diagnostic/session-establishment requests.
 
@@ -98,6 +99,16 @@ In the default sensor/USB build, the protocol reports the designed logical capac
 In an authorized actuator-capable build, active channels become 4 motors + 2 servos only after the
 LEDC PWM backend initializes successfully behind the board-validation and actuator-evidence gates.
 
+Rangefinder-related `board_validation_issue_mask` bits are:
+
+```text
+bit 16 = VL53L0X sensor/XSHUT evidence missing
+bit 17 = invalid VL53L0X XSHUT GPIO configuration
+bit 18 = VL53L0X XSHUT overlaps an enabled actuator GPIO
+```
+
+These bits are evaluated when the rangefinder feature is requested. Their absence in a build where `CONFIG_SHAHBAZ_VL53L0X_ENABLE=n` does not advertise active rangefinders. Protocol v2 has no separate rangefinder-capability byte; clients use the per-role `DeviceStatusResponse` lifecycle and must still treat missing/stale instance telemetry as unavailable for control.
+
 ## Actuator commands
 
 Physical PWM output is disabled by default. To enable it, firmware must be built with
@@ -113,17 +124,18 @@ prefix described above. Logical payloads after that prefix:
 ```text
 ArmRequest       empty
 ArmConfirm       empty
-MotorCommand     u8 motor_channel, u16 pulse_us
 ServoCommand     u8 servo_channel, u16 pulse_us
-ActuatorCommand  u8 actuator_kind, u8 channel, u16 pulse_us
 SetControlMode   u8 mode
+MotorFrameCommand
+                 u8 count (=4), then four (u8 channel, u16 pulse_us) entries
 ```
 
-`actuator_kind` values:
+Legacy compatibility payloads are:
 
 ```text
-1 = motor
-2 = servo
+MotorCommand     u8 motor_channel, u16 pulse_us
+ActuatorCommand  u8 actuator_kind, u8 channel, u16 pulse_us
+actuator_kind    1 = motor, 2 = servo
 ```
 
 The current production PWM backend accepts motor pulses from 900 to 2100 us and servo pulses from
@@ -131,13 +143,31 @@ The current production PWM backend accepts motor pulses from 900 to 2100 us and 
 `SetControlMode` currently accepts only mode `0`, the direct PWM command mode used by the Android
 flight-controller module.
 
+`MotorFrameCommand` is message `0x8014`. Its fixed 13-byte logical payload must contain channel IDs
+`0`, `1`, `2`, and `3` exactly once in that canonical order; each little-endian pulse must pass the
+configured motor bounds. Firmware validates the complete payload before the actuator backend is
+called. A successful application produces exactly one `CommandAck` whose request sequence matches
+the frame and whose application-action byte is `18`. Backend failure forces all outputs safe,
+latches an actuator fault, and produces one `CommandNack` instead of an ACK.
+
+ESP32-S3 LEDC has no cross-channel simultaneous-latch primitive. The backend therefore calculates
+and stages all four duties first, then calls `ledc_update_duty` sequentially. This is a coherent
+protocol/application transaction with all-safe failure handling, not a claim of simultaneous
+electrical edges on all four outputs.
+
+The earlier `MotorCommand` and motor-targeted `ActuatorCommand` shapes remain recognized only for
+wire compatibility. Production/default firmware rejects both before they refresh safety timestamps,
+commit a sequence, or reach an actuator. A deliberate migration bench profile can opt in with
+`CONFIG_SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS=y`; it must never be used for flight. The
+standalone `ServoCommand` and a generic `ActuatorCommand` targeting a servo remain available.
+
 `Disarm` and `EmergencyStop` stay tokenless safety overrides. They may request the safer state even
 if their frame is otherwise noncanonical, but only canonical valid frames advance normal
 freshness/sequence state.
 
-While armed, at least one accepted motor, servo, or generic actuator command must refresh the
-independent control-command watchdog within 250 ms. Heartbeat and `SetControlMode` traffic do not
-refresh it. Expiry immediately drives safe outputs and latches the corresponding safety reason.
+While armed, at least one accepted coherent motor frame or servo command must refresh the independent
+control-command watchdog within 250 ms. Heartbeat and `SetControlMode` traffic do not refresh it.
+Expiry immediately drives safe outputs and latches the corresponding safety reason.
 
 ## Main message types
 
@@ -152,6 +182,22 @@ refresh it. Expiry immediately drives safe outputs and latches the corresponding
 - actuator/control commands, disabled by default and enabled only by the explicit PWM actuator
   profile described above
 
+Current firmware emits a 10-byte `DeviceStatusResponse`. Bytes 0..5 retain the legacy safety,
+communication, telemetry-enabled, actuator-armed, SHT30-online, and MS5611-online fields. Bytes
+6..9 append the fixed Ground, Up, Front-left, and Front-right VL53L0X lifecycle values:
+
+```text
+0 = disabled or hardware presence unknown
+1 = configured and initializing
+2 = live
+3 = degraded/offline after a configuration, XSHUT, I2C, timeout, or recovery fault
+```
+
+Clients remain required to accept the earlier exact 6-byte shape, but absence of the four appended
+bytes means lifecycle is unknown, not proof that rangefinders are absent. All other payload lengths
+and lifecycle values are malformed. `LIVE` reports driver lifecycle only; each individual sample
+must still pass its own range status, validity, quality, sequence, and freshness checks.
+
 ## SensorSample
 
 Current sensor identifiers:
@@ -159,7 +205,13 @@ Current sensor identifiers:
 ```text
 sensor 1 = SHT30
 sensor 2 = MS5611
-instance = 0
+sensor 3 = VL53L0X
+
+SHT30/MS5611 instance = 0
+VL53L0X instance 0 = Ground/downward
+VL53L0X instance 1 = Upward
+VL53L0X instance 2 = Front-left
+VL53L0X instance 3 = Front-right
 ```
 
 The SensorSample payload layout itself is unchanged by protocol v2:
@@ -176,7 +228,56 @@ u8  field_count
 repeated field_count times: u8 field_id, u8 field_type, u32 raw_value
 ```
 
-SHT30 reports ambient temperature and relative humidity. MS5611 reports pressure and internal temperature. In the operational product, the **Shahbaz Android application** owns QNH and calculates barometric altitude from pressure. Windows HIL may calculate the same value independently for diagnostics only.
+Field type `1` is signed 32-bit and field type `2` is unsigned 32-bit. Current fields are:
+
+```text
+1 = ambient temperature, signed milli-degrees Celsius
+2 = relative humidity, unsigned milli-percent
+3 = compensated pressure, signed pascal
+4 = internal temperature, signed milli-degrees Celsius
+5 = distance, unsigned millimetres
+6 = raw VL53L0X range status, unsigned
+7 = VL53L0X Shahbaz control-eligibility quality, unsigned percent
+```
+
+SHT30 reports fields 1 and 2. MS5611 reports fields 3 and 4. In the operational product, the **Shahbaz Android application** owns QNH and calculates barometric altitude from pressure. Windows HIL may calculate the same value independently for diagnostics only.
+
+Each VL53L0X sample reports fields 5, 6, and 7. Every physical sensor starts at 7-bit address `0x29`; firmware uses four independent XSHUT lines to assign runtime addresses `0x30..0x33` in the fixed instance order above. The feature is disabled by default until sensor and XSHUT evidence gates pass.
+
+The raw range status is `RESULT_RANGE_STATUS[6:3]`. Status `0` and `11` are accepted for control. Named failures are `1` sigma, `2` signal, `3` minimum range, `4` phase, and `5` hardware; other values are unknown. Firmware considers only 30 through 2000 mm inclusive control-eligible. Field 7 is currently `100` only when both status and distance pass that policy, otherwise `0`; it is not a measured optical signal-strength percentage.
+
+VL53L0X validity/quality semantics are:
+
+```text
+validity bit 0 = TransportValid
+validity bit 1 = CrcValid                 # not set for VL53L0X results
+validity bit 2 = CalibrationValid
+validity bit 3 = TimingValid
+validity bit 4 = PlausibilityValid        # only status 0/11 and 30..2000 mm
+
+quality bit 0 = Fresh
+quality bit 1 = RecoveredAfterError
+quality bit 2 = RateLimited
+
+VL53L0X health bit 0 = invalid range status
+VL53L0X health bit 1 = distance outside 30..2000 mm
+```
+
+Raw distance/status are published even when plausibility fails so clients can diagnose out-of-range and optical/status failures. Flight-control consumers must require all expected validity bits and acceptable health/status/quality, retain any last-good value only for presentation, and must never silently use a rejected sample for control. Sequences advance independently for each VL53L0X instance. Driver initialization/retry errors are summarized by the per-role lifecycle rather than serialized as samples; any non-`LIVE` lifecycle, absence, or staleness makes that instance unavailable for control.
+
+The Ground instance is only an observation. The board never declares touchdown or disarms from range alone. Android owns tilt projection, continuity/freshness checks, estimator agreement, and fusion with an independent landed indication.
+
+### SetSensorRate logical payload
+
+After the session-token prefix described above, `SetSensorRate` carries:
+
+```text
+u8  sensor_id
+u8  instance_id
+u32 interval_us
+```
+
+Sensors 1 and 2 accept only instance 0. Sensor 3 accepts instances 0 through 3 and intervals from 60,000 through 10,000,000 us. All four VL53L0X devices deliberately use one shared fair acquisition cadence: selecting any valid VL53L0X instance updates the array cadence, not only that physical sensor.
 
 ## Required Android/Shahbaz client behavior
 
@@ -186,10 +287,10 @@ SHT30 reports ambient temperature and relative humidity. MS5611 reports pressure
 - Periodically re-synchronize long-lived sessions so clock drift remains well inside the freshness window.
 - Treat `SessionMismatch`, `StaleOrExpired`, CRC failure, and sequence errors as hard command rejection, not as permission to retry with stale data.
 - On reconnect, discard client-side command/session state as well as device-side state.
-- Do not send arm/motor/servo commands unless `DeviceInfoResponse` reports
+- Do not send arm/coherent-motor-frame/servo commands unless `DeviceInfoResponse` reports
   `actuator_available=1`, at least four active motor channels, and an application-level arming
   decision has passed.
-- Continue sending fresh heartbeat/time-sync traffic and fresh actuator commands while armed. The
+- Continue sending fresh heartbeat/time-sync traffic and fresh coherent motor frames while armed. The
   safety supervisor applies independent heartbeat and actuator-command timeouts; heartbeat traffic
   alone cannot keep the last PWM output active.
 

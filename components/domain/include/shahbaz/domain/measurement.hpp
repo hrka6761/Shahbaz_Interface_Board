@@ -18,6 +18,7 @@ namespace shahbaz::domain {
 enum class SensorId : std::uint8_t {
     Sht3x = 1,
     Ms5611 = 2,
+    Vl53l0x = 3,
 };
 
 enum class FieldId : std::uint8_t {
@@ -25,6 +26,9 @@ enum class FieldId : std::uint8_t {
     RelativeHumidityMilliPercent = 2,
     CompensatedPressurePascal = 3,
     InternalTemperatureMilliCelsius = 4,
+    DistanceMillimeters = 5,
+    RangeStatus = 6,
+    SignalQualityPercent = 7,
 };
 
 enum class FieldType : std::uint8_t {

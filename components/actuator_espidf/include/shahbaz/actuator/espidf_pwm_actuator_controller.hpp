@@ -25,6 +25,9 @@ class EspIdfPwmActuatorController final : public safety::IActuatorController {
     [[nodiscard]] auto writePulseUs(safety::ActuatorKind kind,
                                     std::uint8_t channel,
                                     std::uint16_t pulse_us) noexcept -> safety::ActuatorStatus override;
+    [[nodiscard]] auto writeMotorFrame(
+        const safety::QuadMotorPulseFrame& pulse_us) noexcept
+        -> safety::ActuatorStatus override;
     [[nodiscard]] auto outputsEnabled() const noexcept -> bool override { return outputs_enabled_; }
     [[nodiscard]] auto armed() const noexcept -> bool override { return armed_; }
     [[nodiscard]] auto available() const noexcept -> bool override { return initialized_; }

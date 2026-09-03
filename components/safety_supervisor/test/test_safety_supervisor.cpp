@@ -46,6 +46,14 @@ public:
         outputs_enabled = true;
         return ActuatorStatus::Ok;
     }
+    [[nodiscard]] auto writeMotorFrame(
+        const QuadMotorPulseFrame&) noexcept -> ActuatorStatus override {
+        if (!is_armed) {
+            return ActuatorStatus::NotArmed;
+        }
+        outputs_enabled = true;
+        return ActuatorStatus::Ok;
+    }
 
     [[nodiscard]] auto outputsEnabled() const noexcept -> bool override {
         return outputs_enabled;

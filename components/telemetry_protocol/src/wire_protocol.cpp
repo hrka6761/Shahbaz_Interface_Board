@@ -113,6 +113,7 @@ bool isKnownMessageType(std::uint16_t raw_type) noexcept {
         case MessageType::MotorCommand:
         case MessageType::ServoCommand:
         case MessageType::SetControlMode:
+        case MessageType::MotorFrameCommand:
             return true;
     }
     return false;

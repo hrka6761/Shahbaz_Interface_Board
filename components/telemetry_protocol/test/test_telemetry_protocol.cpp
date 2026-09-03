@@ -267,6 +267,7 @@ bool testPhysicalControlMessagesAreProtocolSupported() {
         MessageType::MotorCommand,
         MessageType::ServoCommand,
         MessageType::SetControlMode,
+        MessageType::MotorFrameCommand,
     };
     for (MessageType type : rejected) {
         CHECK(policyFor(type) == MessagePolicy::SupportedCurrentPhase);

@@ -22,6 +22,8 @@ bool testNullControllerHasNoActiveState() {
     CHECK(controller.arm() == shahbaz::safety::ActuatorStatus::Unavailable);
     CHECK(controller.writePulseUs(shahbaz::safety::ActuatorKind::Motor, 0U, 1000U) ==
           shahbaz::safety::ActuatorStatus::Unavailable);
+    CHECK(controller.writeMotorFrame({{1000U, 1000U, 1000U, 1000U}}) ==
+          shahbaz::safety::ActuatorStatus::Unavailable);
 
     controller.forceSafe(shahbaz::safety::SafeStopReason::Startup);
     controller.forceSafe(shahbaz::safety::SafeStopReason::ArmRejected);

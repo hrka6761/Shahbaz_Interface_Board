@@ -73,6 +73,50 @@ config SHAHBAZ_SENSOR_EVIDENCE_RECORD_ID
     default ""
     depends on SHAHBAZ_SENSOR_HARDWARE_VERIFIED
 
+config SHAHBAZ_VL53L0X_ENABLE
+    bool "Enable four VL53L0X rangefinders"
+    default n
+    depends on SHAHBAZ_SENSOR_HARDWARE_VERIFIED
+    help
+        Safe default is disabled. Four identical VL53L0X devices cannot share
+        their power-up 7-bit address 0x29 without four independently controlled
+        XSHUT lines (or a separately implemented I2C multiplexer). This option
+        is accepted only with exact XSHUT wiring evidence below.
+
+config SHAHBAZ_VL53L0X_XSHUT_PINS_PHYSICALLY_REVIEWED
+    bool "Four VL53L0X XSHUT routes physically reviewed"
+    default n
+    depends on SHAHBAZ_VL53L0X_ENABLE
+
+config SHAHBAZ_VL53L0X_XSHUT_EVIDENCE_RECORD_ID
+    string "VL53L0X XSHUT evidence record ID"
+    default ""
+    depends on SHAHBAZ_VL53L0X_XSHUT_PINS_PHYSICALLY_REVIEWED
+
+config SHAHBAZ_VL53L0X_GROUND_XSHUT_GPIO
+    int "Ground/downward VL53L0X XSHUT GPIO"
+    default 12
+    range 0 48
+    depends on SHAHBAZ_VL53L0X_ENABLE
+
+config SHAHBAZ_VL53L0X_UP_XSHUT_GPIO
+    int "Upward VL53L0X XSHUT GPIO"
+    default 13
+    range 0 48
+    depends on SHAHBAZ_VL53L0X_ENABLE
+
+config SHAHBAZ_VL53L0X_FRONT_LEFT_XSHUT_GPIO
+    int "Front-left VL53L0X XSHUT GPIO"
+    default 14
+    range 0 48
+    depends on SHAHBAZ_VL53L0X_ENABLE
+
+config SHAHBAZ_VL53L0X_FRONT_RIGHT_XSHUT_GPIO
+    int "Front-right VL53L0X XSHUT GPIO"
+    default 15
+    range 0 48
+    depends on SHAHBAZ_VL53L0X_ENABLE
+
 config SHAHBAZ_NATIVE_USB_ROUTE_VERIFIED
     bool "Native connector continuity to GPIO19/GPIO20 physically verified"
     default n

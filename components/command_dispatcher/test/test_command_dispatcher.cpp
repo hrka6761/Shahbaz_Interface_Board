@@ -1,6 +1,7 @@
 #include "shahbaz/command/command_dispatcher.hpp"
 #include "shahbaz/safety/safety_supervisor.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -49,6 +50,17 @@ public:
         ++write_calls;
         return safety::ActuatorStatus::Ok;
     }
+    [[nodiscard]] auto writeMotorFrame(
+        const safety::QuadMotorPulseFrame& pulse_us) noexcept
+        -> safety::ActuatorStatus override {
+        if (!is_armed) {
+            return safety::ActuatorStatus::NotArmed;
+        }
+        last_motor_frame = pulse_us;
+        outputs_enabled = true;
+        ++motor_frame_write_calls;
+        return safety::ActuatorStatus::Ok;
+    }
     [[nodiscard]] bool outputsEnabled() const noexcept override { return outputs_enabled; }
     [[nodiscard]] bool armed() const noexcept override { return is_armed; }
     [[nodiscard]] bool available() const noexcept override { return is_available; }
@@ -58,6 +70,8 @@ public:
     bool outputs_enabled{false};
     std::uint32_t safe_calls{0U};
     std::uint32_t write_calls{0U};
+    std::uint32_t motor_frame_write_calls{0U};
+    safety::QuadMotorPulseFrame last_motor_frame{};
     safety::ActuatorKind last_kind{safety::ActuatorKind::Motor};
     std::uint8_t last_channel{0U};
     std::uint16_t last_pulse_us{0U};
@@ -68,14 +82,16 @@ constexpr command::DispatcherConfig kConfig{
     100U,
     command::IntervalBounds{100U, 1000U},
     command::IntervalBounds{10U, 500U},
+    command::IntervalBounds{20'000U, 100'000U},
 };
 
 struct Fixture final {
     FakeSafeController actuator{};
     safety::SafetySupervisor safety_supervisor{actuator, safety::SafetyConfig{10000U}};
-    command::CommandDispatcher dispatcher{safety_supervisor, kConfig};
+    command::CommandDispatcher dispatcher;
 
-    Fixture() {
+    explicit Fixture(command::DispatcherConfig config = kConfig)
+        : dispatcher{safety_supervisor, config} {
         (void)safety_supervisor.completeInitialization(0U);
         (void)safety_supervisor.setUsbConnected(true, 1U);
     }
@@ -112,6 +128,19 @@ command::DispatchContext fresh(
     std::uint64_t received_us,
     std::uint64_t dispatch_us) {
     return {received_us, dispatch_us, command::SenderFreshness::Fresh};
+}
+
+std::array<std::uint8_t, 13U> makeMotorFramePayload(
+    const safety::QuadMotorPulseFrame& pulse_us) {
+    std::array<std::uint8_t, 13U> payload{};
+    payload[0] = static_cast<std::uint8_t>(safety::kQuadMotorCount);
+    for (std::size_t index = 0U; index < pulse_us.size(); ++index) {
+        const auto offset = 1U + index * 3U;
+        payload[offset] = static_cast<std::uint8_t>(index);
+        payload[offset + 1U] = static_cast<std::uint8_t>(pulse_us[index] & 0xFFU);
+        payload[offset + 2U] = static_cast<std::uint8_t>((pulse_us[index] >> 8U) & 0xFFU);
+    }
+    return payload;
 }
 
 bool testHeartbeatFreshnessIsIndependent() {
@@ -216,7 +245,9 @@ bool testDuplicateAndOutOfOrderHeartbeatsDoNotRefresh() {
 }
 
 bool testPhysicalControlSchemasAndSafetyGating() {
-    Fixture fixture{};
+    auto legacy_config = kConfig;
+    legacy_config.allow_legacy_individual_motor_commands = true;
+    Fixture fixture{legacy_config};
 
     constexpr std::uint8_t motor[] = {0U, 0xB0U, 0x04U};  // channel 0, 1200 us
     command::DispatchResult result = fixture.dispatcher.dispatch(
@@ -291,6 +322,192 @@ bool testPhysicalControlSchemasAndSafetyGating() {
                   bad_servo_pulse, sizeof(bad_servo_pulse)),
         fresh(10U, 10U));
     CHECK(result.accepted);
+    return true;
+}
+
+bool testLegacyIndividualMotorPathsDefaultClosedWithoutSafetySideEffects() {
+    Fixture fixture{};
+    CHECK(fixture.safety_supervisor.observeValidHeartbeat(2U));
+    auto result = fixture.dispatcher.dispatch(
+        makeEmptyFrame(protocol::MessageType::ArmRequest, 1U),
+        fresh(3U, 3U));
+    CHECK(result.accepted);
+    CHECK(fixture.safety_supervisor.state() == safety::SafetyState::Armed);
+
+    const auto frame_before = fixture.safety_supervisor.freshness().valid_frame;
+    const auto control_before = fixture.safety_supervisor.freshness().valid_control_command;
+    const auto invalid_before = fixture.safety_supervisor.counters().invalid_commands;
+
+    constexpr std::uint8_t motor[] = {0U, 0xB0U, 0x04U};
+    result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::MotorCommand, 2U, motor, sizeof(motor)),
+        fresh(4U, 4U));
+    CHECK(!result.accepted);
+    CHECK(result.nack_reason == protocol::NackReason::InvalidState);
+    CHECK(result.validation_error == command::ValidationError::UnsupportedDirection);
+    CHECK(!result.frame_freshness_updated);
+    CHECK(!result.control_freshness_updated);
+    CHECK(fixture.dispatcher.lastAcceptedSequence() == 1U);
+    CHECK(fixture.safety_supervisor.freshness().valid_frame.monotonic_us ==
+          frame_before.monotonic_us);
+    CHECK(fixture.safety_supervisor.freshness().valid_control_command.monotonic_us ==
+          control_before.monotonic_us);
+    CHECK(fixture.safety_supervisor.counters().invalid_commands == invalid_before);
+    CHECK(fixture.actuator.write_calls == 0U);
+
+    constexpr std::uint8_t generic_motor[] = {
+        static_cast<std::uint8_t>(safety::ActuatorKind::Motor), 2U, 0xE8U, 0x03U
+    };
+    result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::ActuatorCommand, 2U,
+                  generic_motor, sizeof(generic_motor)),
+        fresh(5U, 5U));
+    CHECK(!result.accepted);
+    CHECK(result.validation_error == command::ValidationError::UnsupportedDirection);
+    CHECK(!result.frame_freshness_updated);
+    CHECK(!result.control_freshness_updated);
+    CHECK(fixture.dispatcher.lastAcceptedSequence() == 1U);
+    CHECK(fixture.safety_supervisor.freshness().valid_frame.monotonic_us ==
+          frame_before.monotonic_us);
+    CHECK(fixture.safety_supervisor.freshness().valid_control_command.monotonic_us ==
+          control_before.monotonic_us);
+    CHECK(fixture.safety_supervisor.counters().invalid_commands == invalid_before);
+    CHECK(fixture.actuator.write_calls == 0U);
+
+    // Servo-only legacy operation remains available and commits the unconsumed
+    // sequence, demonstrating that the default gate is specific to motors.
+    constexpr std::uint8_t generic_servo[] = {
+        static_cast<std::uint8_t>(safety::ActuatorKind::Servo), 1U, 0xDCU, 0x05U
+    };
+    result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::ActuatorCommand, 2U,
+                  generic_servo, sizeof(generic_servo)),
+        fresh(6U, 6U));
+    CHECK(result.accepted);
+    CHECK(result.actuator.present);
+    CHECK(result.actuator.kind == safety::ActuatorKind::Servo);
+    CHECK(fixture.dispatcher.lastAcceptedSequence() == 2U);
+    return true;
+}
+
+bool testMotorFrameIsCanonicalAndFullyValidatedBeforeAcceptance() {
+    static_assert(static_cast<std::uint8_t>(command::ApplicationAction::MotorFrameCommand) == 18U,
+                  "MotorFrameCommand ACK action is a cross-platform wire contract");
+
+    Fixture fixture{};
+    const safety::QuadMotorPulseFrame expected{{900U, 1200U, 1800U, 2100U}};
+    const auto canonical = makeMotorFramePayload(expected);
+
+    auto result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::MotorFrameCommand, 1U,
+                  canonical.data(), canonical.size()),
+        fresh(2U, 2U));
+    CHECK(!result.accepted);
+    CHECK(result.validation_error == command::ValidationError::InvalidSafetyState);
+    CHECK(!result.control_freshness_updated);
+
+    CHECK(fixture.safety_supervisor.observeValidHeartbeat(3U));
+    result = fixture.dispatcher.dispatch(
+        makeEmptyFrame(protocol::MessageType::ArmRequest, 2U),
+        fresh(4U, 4U));
+    CHECK(result.accepted);
+    CHECK(fixture.safety_supervisor.state() == safety::SafetyState::Armed);
+
+    result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::MotorFrameCommand, 3U,
+                  canonical.data(), canonical.size()),
+        fresh(5U, 5U));
+    CHECK(result.accepted);
+    CHECK(result.reply == command::ReplyKind::CommandAck);
+    CHECK(result.action == command::ApplicationAction::MotorFrameCommand);
+    CHECK(result.motor_frame.present);
+    CHECK(result.motor_frame.pulse_us == expected);
+    CHECK(result.control_freshness_updated);
+    // Dispatch performs schema/safety validation only. No channel can be
+    // written until ProtocolEngine applies this complete value object.
+    CHECK(fixture.actuator.write_calls == 0U);
+    CHECK(fixture.actuator.motor_frame_write_calls == 0U);
+
+    std::uint64_t now = 6U;
+    const auto expectRejected = [&](const std::uint8_t* payload,
+                                    const std::size_t size,
+                                    const command::ValidationError error) -> bool {
+        const auto rejected = fixture.dispatcher.dispatch(
+            makeFrame(protocol::MessageType::MotorFrameCommand, 4U, payload, size),
+            fresh(now, now));
+        ++now;
+        return !rejected.accepted && rejected.validation_error == error &&
+               !rejected.control_freshness_updated &&
+               fixture.actuator.motor_frame_write_calls == 0U;
+    };
+
+    CHECK(expectRejected(canonical.data(), canonical.size() - 1U,
+                         command::ValidationError::InvalidPayloadLength));
+    std::array<std::uint8_t, 14U> too_long{};
+    std::copy(canonical.begin(), canonical.end(), too_long.begin());
+    CHECK(expectRejected(too_long.data(), too_long.size(),
+                         command::ValidationError::InvalidPayloadLength));
+
+    constexpr std::array<std::uint8_t, 4U> invalid_counts{{0U, 3U, 5U, 255U}};
+    for (const std::uint8_t invalid_count : invalid_counts) {
+        auto payload = canonical;
+        payload[0] = invalid_count;
+        CHECK(expectRejected(payload.data(), payload.size(),
+                             command::ValidationError::InvalidPayloadValue));
+    }
+
+    // Any out-of-order, duplicate, omitted, or out-of-range channel is rejected.
+    for (std::size_t index = 0U; index < safety::kQuadMotorCount; ++index) {
+        auto payload = canonical;
+        const auto offset = 1U + index * 3U;
+        payload[offset] = static_cast<std::uint8_t>((index + 1U) % safety::kQuadMotorCount);
+        CHECK(expectRejected(payload.data(), payload.size(),
+                             command::ValidationError::InvalidPayloadValue));
+    }
+
+    // Every channel is independently checked at both exclusive sides of the
+    // inclusive [900, 2100] microsecond motor range.
+    for (std::size_t index = 0U; index < safety::kQuadMotorCount; ++index) {
+        constexpr std::array<std::uint16_t, 2U> invalid_pulses{{899U, 2101U}};
+        for (const std::uint16_t invalid_pulse : invalid_pulses) {
+            auto payload = canonical;
+            const auto offset = 1U + index * 3U;
+            payload[offset + 1U] = static_cast<std::uint8_t>(invalid_pulse & 0xFFU);
+            payload[offset + 2U] = static_cast<std::uint8_t>((invalid_pulse >> 8U) & 0xFFU);
+            CHECK(expectRejected(payload.data(), payload.size(),
+                                 command::ValidationError::InvalidPayloadValue));
+        }
+    }
+
+    // Rejected variants never commit sequence 4, so the corrected frame is
+    // accepted with that same sequence number.
+    result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::MotorFrameCommand, 4U,
+                  canonical.data(), canonical.size()),
+        fresh(now, now));
+    CHECK(result.accepted);
+    CHECK(fixture.dispatcher.lastAcceptedSequence() == 4U);
+
+    // The command is not meaningful against a non-Quad actuator contract.
+    FakeSafeController three_motor_actuator{};
+    safety::SafetySupervisor three_motor_safety{
+        three_motor_actuator, safety::SafetyConfig{10000U}};
+    auto three_motor_config = kConfig;
+    three_motor_config.motor_channels = 3U;
+    command::CommandDispatcher three_motor_dispatcher{
+        three_motor_safety, three_motor_config};
+    CHECK(three_motor_safety.completeInitialization(0U));
+    CHECK(three_motor_safety.setUsbConnected(true, 1U));
+    CHECK(three_motor_safety.observeValidHeartbeat(2U));
+    CHECK(three_motor_dispatcher.dispatch(
+              makeEmptyFrame(protocol::MessageType::ArmRequest, 1U),
+              fresh(3U, 3U)).accepted);
+    result = three_motor_dispatcher.dispatch(
+        makeFrame(protocol::MessageType::MotorFrameCommand, 2U,
+                  canonical.data(), canonical.size()),
+        fresh(4U, 4U));
+    CHECK(!result.accepted);
+    CHECK(result.validation_error == command::ValidationError::InvalidPayloadValue);
     return true;
 }
 
@@ -451,36 +668,51 @@ bool testSetSensorRateSchemaAndInjectedBounds() {
     CHECK(result.sensor_rate.sensor_id == command::SensorId::Ms5611);
     CHECK(result.sensor_rate.interval_us == 250U);
 
-    constexpr std::uint8_t unknown_sensor[] = {3U, 0U, 100U, 0U, 0U, 0U};
+    constexpr std::uint8_t valid_vl53l0x[] = {
+        static_cast<std::uint8_t>(command::SensorId::Vl53l0x),
+        3U,
+        0x20U, 0x4EU, 0x00U, 0x00U,
+    };  // 20,000 us and instance 3 are both inclusive boundaries.
     result = fixture.dispatcher.dispatch(
         makeFrame(protocol::MessageType::SetSensorRate,
                   3U,
+                  valid_vl53l0x,
+                  sizeof(valid_vl53l0x)),
+        fresh(4U, 4U));
+    CHECK(result.accepted);
+    CHECK(result.sensor_rate.sensor_id == command::SensorId::Vl53l0x);
+    CHECK(result.sensor_rate.instance_id == 3U);
+
+    constexpr std::uint8_t unknown_sensor[] = {4U, 0U, 100U, 0U, 0U, 0U};
+    result = fixture.dispatcher.dispatch(
+        makeFrame(protocol::MessageType::SetSensorRate,
+                  4U,
                   unknown_sensor,
                   sizeof(unknown_sensor)),
-        fresh(4U, 4U));
+        fresh(5U, 5U));
     CHECK(!result.accepted);
     CHECK(result.validation_error == command::ValidationError::InvalidPayloadValue);
 
-    constexpr std::uint8_t wrong_instance[] = {1U, 1U, 100U, 0U, 0U, 0U};
+    constexpr std::uint8_t wrong_instance[] = {3U, 4U, 0x20U, 0x4EU, 0U, 0U};
     result = fixture.dispatcher.dispatch(
         makeFrame(protocol::MessageType::SetSensorRate,
-                  3U,
+                  4U,
                   wrong_instance,
                   sizeof(wrong_instance)),
-        fresh(5U, 5U));
+        fresh(6U, 6U));
     CHECK(!result.accepted);
     CHECK(result.validation_error == command::ValidationError::InvalidPayloadValue);
 
     constexpr std::uint8_t below_bound[] = {1U, 0U, 99U, 0U, 0U, 0U};
     result = fixture.dispatcher.dispatch(
         makeFrame(protocol::MessageType::SetSensorRate,
-                  3U,
+                  4U,
                   below_bound,
                   sizeof(below_bound)),
-        fresh(6U, 6U));
+        fresh(7U, 7U));
     CHECK(!result.accepted);
     CHECK(result.validation_error == command::ValidationError::InvalidPayloadValue);
-    CHECK(fixture.dispatcher.lastAcceptedSequence() == 2U);
+    CHECK(fixture.dispatcher.lastAcceptedSequence() == 3U);
     return true;
 }
 
@@ -596,6 +828,8 @@ int main() {
                         testInvalidAndStaleHeartbeatsNeverRefreshHeartbeat() &&
                         testDuplicateAndOutOfOrderHeartbeatsDoNotRefresh() &&
                         testPhysicalControlSchemasAndSafetyGating() &&
+                        testLegacyIndividualMotorPathsDefaultClosedWithoutSafetySideEffects() &&
+                        testMotorFrameIsCanonicalAndFullyValidatedBeforeAcceptance() &&
                         testEmergencyStopAndDisarmAlwaysApply() &&
                         testProvisionalEmptyAndTokenSchemas() &&
                         testSetSensorRateSchemaAndInjectedBounds() &&

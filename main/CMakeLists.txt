@@ -15,6 +15,7 @@ idf_component_register(
         platform_espidf
         safety_supervisor
         sensor_scheduler
+        sensor_vl53l0x
         usb_transport_espidf
         esp_system
 )

@@ -4,6 +4,7 @@ idf_component_register(
         "src/espidf_board_validator.cpp"
         "src/espidf_monotonic_clock.cpp"
         "src/espidf_i2c_bus.cpp"
+        "src/espidf_sensor_shutdown_bank.cpp"
     INCLUDE_DIRS "include"
     REQUIRES board_support interfaces esp_timer esp_psram spi_flash esp_driver_i2c esp_driver_gpio esp_rom
 )
@@ -18,5 +19,6 @@ set_source_files_properties(
     src/espidf_board_validator.cpp
     src/espidf_monotonic_clock.cpp
     src/espidf_i2c_bus.cpp
+    src/espidf_sensor_shutdown_bank.cpp
     PROPERTIES COMPILE_OPTIONS "-Wno-pedantic"
 )

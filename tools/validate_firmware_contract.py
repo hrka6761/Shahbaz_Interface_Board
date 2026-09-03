@@ -604,6 +604,8 @@ def validate_contract() -> None:
     )
     require("CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n" in defaults,
             "default build must keep physical actuators disabled")
+    require("CONFIG_SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS=n" in defaults,
+            "default build must reject individual-motor compatibility commands")
     require(
         re.search(
             r"set\(SHAHBAZ_ACTUATOR_BACKEND\s+\"null\"\s+CACHE\s+STRING",
@@ -618,6 +620,15 @@ def validate_contract() -> None:
         re.search(r"config\s+SHAHBAZ_ACTUATORS_ENABLE\b", main_kconfig) is not None and
         "default n" in main_kconfig,
         "always-seeded main/Kconfig.projbuild must declare the fail-closed actuator selector",
+    )
+    require(
+        re.search(
+            r"config\s+SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS\b.*?default\s+n",
+            main_kconfig,
+            flags=re.DOTALL,
+        ) is not None and
+        "allow_legacy_individual_motor_commands" in app_main,
+        "production composition must expose and default-close the legacy individual-motor gate",
     )
     require(
         re.search(r"config\s+SHAHBAZ_ACTUATORS_ENABLE\b", actuator_kconfig) is None,

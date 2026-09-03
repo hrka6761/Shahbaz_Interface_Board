@@ -14,6 +14,7 @@ object ProvisionalProtocolSelfTest {
         sensorValidityBitsMatchFirmware()
         sensorTelemetryAndAltitude()
         deviceInfoValidationPolicy()
+        deviceStatusCompatibilityAndLifecycle()
         boundedTimeSyncRetryCorrelation()
         operationalAndroidSessionLifecycle()
         startupAcknowledgementsFailClosed()
@@ -101,12 +102,19 @@ object ProvisionalProtocolSelfTest {
     }
 
     private fun controlMessagesAreTypedAndEncodable() {
+        val completeFrame = listOf(
+            MotorPulse(3, 1_603),
+            MotorPulse(1, 1_401),
+            MotorPulse(0, 900),
+            MotorPulse(2, 2_100),
+        )
         val requests = listOf(
             SafeRequests.arm(),
             SafeRequests.motor(0, 900),
             SafeRequests.servo(1, 1500),
             SafeRequests.actuator(1, 3, 2100),
             SafeRequests.controlMode(),
+            SafeRequests.motorFrame(completeFrame),
         )
         for ((index, request) in requests.withIndex()) {
             check(outboundPolicy(request.messageType) == MessagePolicy.SUPPORTED_CURRENT_PHASE)
@@ -125,9 +133,52 @@ object ProvisionalProtocolSelfTest {
             missingTokenRejected = true
         }
         check(missingTokenRejected) { "session-bound control encoded without token" }
+        var zeroTokenRejected = false
+        try {
+            SafeOutboundCodec.encode(SafeRequests.motorFrame(completeFrame), 99u, 500uL, 0uL)
+        } catch (_: OutboundPolicyException) {
+            zeroTokenRejected = true
+        }
+        check(zeroTokenRejected) { "session-bound motor frame encoded with zero token" }
         check(SafeRequests.motor(0, 900).payload.contentEquals(hex("00 84 03")))
         check(SafeRequests.servo(1, 1500).payload.contentEquals(hex("01 dc 05")))
         check(SafeRequests.actuator(2, 1, 2500).payload.contentEquals(hex("02 01 c4 09")))
+        check(
+            SafeRequests.motorFrame(completeFrame).payload.contentEquals(
+                hex("04 00 84 03 01 79 05 02 34 08 03 43 06"),
+            ),
+        ) { "motor frame was not encoded in canonical 0..3 order" }
+
+        val invalidFrames = listOf(
+            emptyList(),
+            completeFrame.take(3),
+            completeFrame + MotorPulse(4, 1_500),
+            listOf(MotorPulse(0, 1_000), MotorPulse(1, 1_100), MotorPulse(2, 1_200), MotorPulse(2, 1_300)),
+            listOf(MotorPulse(0, 899), MotorPulse(1, 1_100), MotorPulse(2, 1_200), MotorPulse(3, 1_300)),
+            listOf(MotorPulse(0, 1_000), MotorPulse(1, 1_100), MotorPulse(2, 1_200), MotorPulse(3, 2_101)),
+        )
+        for (invalid in invalidFrames) {
+            var rejected = false
+            try {
+                SafeRequests.motorFrame(invalid)
+            } catch (_: ProtocolException) {
+                rejected = true
+            }
+            check(rejected) { "invalid Quad-X motor frame was accepted: $invalid" }
+        }
+
+        val motorFrameAck = decodeCommandAck(
+            FrameDecoder.decodeDelimited(
+                deviceFrame(
+                    MessageType.COMMAND_ACK,
+                    500u,
+                    600uL,
+                    u32(123u) + byteArrayOf(18),
+                ),
+            ),
+        ) ?: error("MotorFrameCommand ACK was not decoded")
+        check(motorFrameAck.requestSequence == 123u)
+        check(motorFrameAck.action == ApplicationAction.MOTOR_FRAME_COMMAND)
     }
 
     private fun deviceToHostMessagesCannotBeEncoded() {
@@ -182,6 +233,47 @@ object ProvisionalProtocolSelfTest {
         val approximatelyOneKm = BarometricAltitude.metersFromPressure(89_875)
         check(approximatelyOneKm in 995.0..1005.0) { "unexpected altitude $approximatelyOneKm" }
 
+        RangefinderRole.entries.forEachIndexed { index, role ->
+            val range = decodeSensorSample(
+                decodedSensorFrame(
+                    vl53l0xPayload(
+                        instance = role.instanceId,
+                        sequence = (20 + index).toUInt(),
+                        deviceTimestampUs = (200 + index).toULong(),
+                        distanceMillimeters = 300 + index,
+                    ),
+                ),
+            )!!.asVl53l0xReading()
+            check(range.role == role)
+            check(range.distanceMillimeters == 300 + index)
+            check(range.rawRangeStatus == 0)
+            check(range.signalQualityPercent == 100)
+        }
+
+        for (invalid in listOf(
+            vl53l0xPayload(instance = 4, sequence = 1u, deviceTimestampUs = 1uL),
+            vl53l0xPayload(
+                instance = 0,
+                sequence = 1u,
+                deviceTimestampUs = 1uL,
+                distanceMillimeters = 2_001,
+            ),
+            vl53l0xPayload(
+                instance = 0,
+                sequence = 1u,
+                deviceTimestampUs = 1uL,
+                rawStatus = 2,
+            ),
+        )) {
+            var rangeRejected = false
+            try {
+                decodeSensorSample(decodedSensorFrame(invalid))!!.asVl53l0xReading()
+            } catch (_: ProtocolException) {
+                rangeRejected = true
+            }
+            check(rangeRejected) { "invalid VL53L0X sample was accepted" }
+        }
+
         var rejected = false
         try {
             val duplicate =
@@ -196,8 +288,8 @@ object ProvisionalProtocolSelfTest {
 
     private fun deviceInfoValidationPolicy() {
         check(BoardValidationIssues.FATAL_MASK == 0x400Fu)
-        check(BoardValidationIssues.ADVISORY_MASK == 0xBFF0u)
-        check(BoardValidationIssues.KNOWN_MASK == 0xFFFFu)
+        check(BoardValidationIssues.ADVISORY_MASK == 0x7BFF0u)
+        check(BoardValidationIssues.KNOWN_MASK == 0x7FFFFu)
         val advisoryMask = BoardValidationIssues.ADVISORY_MASK
         val decoded = decodeDeviceInfoResponse(
             FrameDecoder.decodeDelimited(
@@ -222,12 +314,16 @@ object ProvisionalProtocolSelfTest {
         }
 
         check(rejected(decoded.copy(protocolVersion = 1)))
-        check(rejected(decoded.copy(boardValidationIssueMask = 0x1_0000u)))
+        val rangefinderIssues = 0x7_0000u
+        val rangefinderValidated =
+            decoded.copy(boardValidationIssueMask = rangefinderIssues).validateSensorOnlyProfile()
+        check(rangefinderValidated.advisoryIssueMask == rangefinderIssues)
+        check(rejected(decoded.copy(boardValidationIssueMask = 0x8_0000u)))
         check(rejected(decoded.copy(actuatorAvailable = true)))
         check(rejected(decoded.copy(actuatorsEnabledByConfiguration = true)))
         check(rejected(decoded.copy(activeMotorChannels = 1)))
         check(rejected(decoded.copy(activeServoChannels = 1)))
-        repeat(16) { bit ->
+        repeat(19) { bit ->
             val issue = 1u shl bit
             if ((issue and BoardValidationIssues.FATAL_MASK) != 0u) {
                 check(rejected(decoded.copy(boardValidationIssueMask = issue)))
@@ -246,6 +342,78 @@ object ProvisionalProtocolSelfTest {
             malformedRejected = true
         }
         check(malformedRejected) { "unknown DeviceInfo target was accepted" }
+    }
+
+    private fun deviceStatusCompatibilityAndLifecycle() {
+        val legacy = decodeDeviceStatusResponse(
+            FrameDecoder.decodeDelimited(
+                deviceFrame(
+                    MessageType.DEVICE_STATUS_RESPONSE,
+                    7u,
+                    50uL,
+                    byteArrayOf(1, 4, 1, 0, 1, 0),
+                ),
+            ),
+        ) ?: error("legacy DeviceStatusResponse was not decoded")
+        check(legacy.safetyState == DeviceSafetyState.DISARMED)
+        check(legacy.communicationState == DeviceCommunicationState.HEALTHY)
+        check(legacy.telemetryEnabled)
+        check(!legacy.armed)
+        check(legacy.sht30Online)
+        check(!legacy.ms5611Online)
+        check(legacy.rangefinders == null) {
+            "legacy status must remain unknown rather than imply absent sensors"
+        }
+
+        val extendedPayload = byteArrayOf(1, 4, 1, 0, 1, 1, 0, 1, 2, 3)
+        val extendedFrame = FrameDecoder.decodeDelimited(
+            deviceFrame(MessageType.DEVICE_STATUS_RESPONSE, 8u, 60uL, extendedPayload),
+        )
+        val extended = decodeDeviceStatusResponse(extendedFrame)
+            ?: error("extended DeviceStatusResponse was not decoded")
+        val rangefinders = extended.rangefinders
+            ?: error("extended status omitted rangefinder lifecycle")
+        check(rangefinders.ground == RangefinderLifecycle.DISABLED_OR_ABSENT)
+        check(rangefinders.up == RangefinderLifecycle.INITIALIZING)
+        check(rangefinders.frontLeft == RangefinderLifecycle.LIVE)
+        check(rangefinders.frontRight == RangefinderLifecycle.DEGRADED)
+        val expectedByRole = listOf(
+            RangefinderLifecycle.DISABLED_OR_ABSENT,
+            RangefinderLifecycle.INITIALIZING,
+            RangefinderLifecycle.LIVE,
+            RangefinderLifecycle.DEGRADED,
+        )
+        RangefinderRole.entries.forEach { role ->
+            check(rangefinders[role] == expectedByRole[role.instanceId])
+        }
+
+        fun rejected(payload: ByteArray): Boolean = try {
+            decodeDeviceStatusResponse(
+                FrameDecoder.decodeDelimited(
+                    deviceFrame(MessageType.DEVICE_STATUS_RESPONSE, 9u, 70uL, payload),
+                ),
+            )
+            false
+        } catch (_: ProtocolException) {
+            true
+        }
+        check(rejected(ByteArray(7)))
+        check(rejected(ByteArray(9)))
+        check(rejected(ByteArray(11)))
+        check(rejected(extendedPayload.copyOf().also { it[9] = 4 }))
+        check(rejected(extendedPayload.copyOf().also { it[2] = 2 }))
+        check(rejected(extendedPayload.copyOf().also { it[0] = 7 }))
+        check(rejected(extendedPayload.copyOf().also { it[1] = 5 }))
+
+        val session = ShahbazLinkSession(monotonicUs = { 1_000uL })
+        session.onUsbAttached()
+        val events = session.feedUsbBytes(
+            deviceFrame(MessageType.DEVICE_STATUS_RESPONSE, 10u, 80uL, extendedPayload),
+        )
+        check(events.any {
+            it is ShahbazLinkSession.Event.DeviceStatusReceived &&
+                it.status.rangefinders?.frontRight == RangefinderLifecycle.DEGRADED
+        }) { "session did not emit typed extended DeviceStatusResponse" }
     }
 
     private fun boundedTimeSyncRetryCorrelation() {
@@ -397,6 +565,25 @@ object ProvisionalProtocolSelfTest {
             } == 1,
         )
         check(session.deviceInfo?.deviceInfo?.boardValidationIssueMask == 0x2FF0u)
+
+        val rangeEvents = session.feedUsbBytes(
+            deviceFrame(
+                MessageType.SENSOR_SAMPLE,
+                15u,
+                now + 60uL,
+                vl53l0xPayload(
+                    instance = RangefinderRole.GROUND.instanceId,
+                    sequence = 1u,
+                    deviceTimestampUs = now + 60uL,
+                ),
+            ),
+        )
+        check(
+            rangeEvents.any {
+                it is ShahbazLinkSession.Event.Vl53l0x &&
+                    it.reading.role == RangefinderRole.GROUND
+            },
+        ) { "ready session did not emit typed VL53L0X telemetry" }
 
         session.qnhHpa = 1000.0
         now += ShahbazLinkSession.TIME_SYNC_REFRESH_US
@@ -645,6 +832,25 @@ object ProvisionalProtocolSelfTest {
             byteArrayOf(2) +
             fieldSigned(1, 21_500) +
             fieldUnsigned(2, 45_000u)
+
+    private fun vl53l0xPayload(
+        instance: Int,
+        sequence: UInt,
+        deviceTimestampUs: ULong,
+        distanceMillimeters: Int = 500,
+        rawStatus: Int = 0,
+        qualityPercent: Int = 100,
+    ): ByteArray =
+        byteArrayOf(SensorId.VL53L0X.wireValue.toByte(), instance.toByte()) +
+            u32(sequence) +
+            u64(deviceTimestampUs) +
+            u32(0x1Du) +
+            u32(SensorQuality.FRESH) +
+            u32(0u) +
+            byteArrayOf(3) +
+            fieldUnsigned(5, distanceMillimeters.toUInt()) +
+            fieldUnsigned(6, rawStatus.toUInt()) +
+            fieldUnsigned(7, qualityPercent.toUInt())
 
     private fun u16(value: Int): ByteArray = ByteArray(2) { i -> ((value shr (8 * i)) and 0xFF).toByte() }
     private fun u32(value: UInt): ByteArray = ByteArray(4) { i -> ((value shr (8 * i)) and 0xFFu).toByte() }

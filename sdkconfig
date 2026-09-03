@@ -569,6 +569,7 @@ CONFIG_PARTITION_TABLE_MD5=y
 #
 # Shahbaz production composition
 #
+# CONFIG_SHAHBAZ_ACTUATORS_ENABLE is not set
 # end of Shahbaz production composition
 
 #
@@ -1695,6 +1696,7 @@ CONFIG_SHAHBAZ_ENABLE_NATIVE_USB_TRANSPORT=y
 # Shahbaz safety supervision
 #
 CONFIG_SHAHBAZ_HEARTBEAT_TIMEOUT_MS=1000
+CONFIG_SHAHBAZ_CONTROL_COMMAND_TIMEOUT_MS=250
 # end of Shahbaz safety supervision
 
 #

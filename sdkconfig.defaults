@@ -29,6 +29,8 @@ CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 
 # Actuator hardware is implemented but deliberately off in the safe bench default.
 CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n
+# Even an actuator-enabled profile must use coherent four-motor generations.
+CONFIG_SHAHBAZ_ALLOW_LEGACY_INDIVIDUAL_MOTOR_COMMANDS=n
 
 # Reviewed production link-safety policy. Android and Windows HIL send a
 # heartbeat every 350 ms; this permits bounded scheduling/USB jitter while

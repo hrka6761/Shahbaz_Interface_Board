@@ -32,6 +32,8 @@ class ShahbazLinkSession(
             val reading: Ms5611Reading,
             val barometricAltitudeMeters: Double,
         ) : Event()
+        data class Vl53l0x(val reading: Vl53l0xReading) : Event()
+        data class DeviceStatusReceived(val status: DeviceStatus) : Event()
         data class ProtocolRejected(val reason: String) : Event()
     }
 
@@ -202,6 +204,7 @@ class ShahbazLinkSession(
             MessageType.COMMAND_ACK -> handleCommandAck(frame, output)
             MessageType.COMMAND_NACK -> handleCommandNack(frame, output)
             MessageType.DEVICE_INFO_RESPONSE -> handleDeviceInfoResponse(frame, output)
+            MessageType.DEVICE_STATUS_RESPONSE -> handleDeviceStatusResponse(frame, output)
             MessageType.SENSOR_SAMPLE -> handleSensorSample(frame, output)
             else -> output += Event.FrameReceived(frame)
         }
@@ -367,10 +370,22 @@ class ShahbazLinkSession(
                     )
                     output += Event.Ms5611(reading, altitude)
                 }
+                SensorId.VL53L0X -> output += Event.Vl53l0x(sample.asVl53l0xReading())
             }
             output += Event.FrameReceived(frame)
         } catch (error: ProtocolException) {
             output += Event.ProtocolRejected(error.message ?: "invalid sensor sample")
+        }
+    }
+
+    private fun handleDeviceStatusResponse(frame: DecodedFrame, output: MutableList<Event>) {
+        try {
+            val status = decodeDeviceStatusResponse(frame)
+                ?: throw ProtocolException("frame is not DeviceStatusResponse")
+            output += Event.DeviceStatusReceived(status)
+            output += Event.FrameReceived(frame)
+        } catch (error: ProtocolException) {
+            output += Event.ProtocolRejected(error.message ?: "invalid DeviceStatusResponse")
         }
     }
 

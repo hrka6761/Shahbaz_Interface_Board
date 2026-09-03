@@ -51,7 +51,8 @@ class EspIdfI2cBus final : public interfaces::II2cBus {
 
     EspIdfI2cBusConfig config_{};
     i2c_master_bus_handle_t bus_{};
-    std::array<DeviceSlot, 4U> devices_{};
+    // SHT30 + MS5611 + VL53L0X default address + four assigned addresses.
+    std::array<DeviceSlot, 8U> devices_{};
 };
 
 }  // namespace shahbaz::platform

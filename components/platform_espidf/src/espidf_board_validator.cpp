@@ -13,6 +13,7 @@
 #include "esp_psram.h"
 #include "sdkconfig.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -127,6 +128,53 @@ constexpr auto actuator_pin_configuration_valid() noexcept -> bool {
     return true;
 }
 
+constexpr auto rangefinder_evidence_present() noexcept -> bool {
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE && \
+    defined(CONFIG_SHAHBAZ_VL53L0X_XSHUT_PINS_PHYSICALLY_REVIEWED) && \
+    CONFIG_SHAHBAZ_VL53L0X_XSHUT_PINS_PHYSICALLY_REVIEWED
+    return CONFIG_SHAHBAZ_SENSOR_EVIDENCE_RECORD_ID[0] != '\0' &&
+           CONFIG_SHAHBAZ_VL53L0X_XSHUT_EVIDENCE_RECORD_ID[0] != '\0';
+#else
+    return false;
+#endif
+}
+
+constexpr auto configured_rangefinder_pins() noexcept
+    -> std::array<std::int32_t, 4U> {
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE
+    return {{CONFIG_SHAHBAZ_VL53L0X_GROUND_XSHUT_GPIO,
+             CONFIG_SHAHBAZ_VL53L0X_UP_XSHUT_GPIO,
+             CONFIG_SHAHBAZ_VL53L0X_FRONT_LEFT_XSHUT_GPIO,
+             CONFIG_SHAHBAZ_VL53L0X_FRONT_RIGHT_XSHUT_GPIO}};
+#else
+    return {{-1, -1, -1, -1}};
+#endif
+}
+
+constexpr auto rangefinder_pin_configuration_valid() noexcept -> bool {
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE
+    return board::is_valid_vl53l0x_xshut_pins(
+        configured_rangefinder_pins(), CONFIG_SHAHBAZ_I2C_SDA_GPIO,
+        CONFIG_SHAHBAZ_I2C_SCL_GPIO);
+#else
+    return true;
+#endif
+}
+
+constexpr auto rangefinder_actuator_pin_conflict() noexcept -> bool {
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE && \
+    defined(CONFIG_SHAHBAZ_ACTUATORS_ENABLE) && CONFIG_SHAHBAZ_ACTUATORS_ENABLE
+    constexpr std::array<std::int32_t, 6U> actuator_pins{{
+        CONFIG_SHAHBAZ_MOTOR0_GPIO, CONFIG_SHAHBAZ_MOTOR1_GPIO,
+        CONFIG_SHAHBAZ_MOTOR2_GPIO, CONFIG_SHAHBAZ_MOTOR3_GPIO,
+        CONFIG_SHAHBAZ_SERVO0_GPIO, CONFIG_SHAHBAZ_SERVO1_GPIO}};
+    return board::vl53l0x_xshut_conflicts(configured_rangefinder_pins(),
+                                          actuator_pins);
+#else
+    return false;
+#endif
+}
+
 } // namespace
 
 auto EspIdfBoardValidator::validate() const noexcept -> interfaces::BoardValidationReport {
@@ -205,6 +253,20 @@ auto EspIdfBoardValidator::validate() const noexcept -> interfaces::BoardValidat
     }
     if (!actuator_evidence_present()) {
         report.issues |= issue_bit(interfaces::BoardValidationIssue::ActuatorEvidenceMissing);
+    }
+#endif
+#if defined(CONFIG_SHAHBAZ_VL53L0X_ENABLE) && CONFIG_SHAHBAZ_VL53L0X_ENABLE
+    if (!rangefinder_evidence_present()) {
+        report.issues |= issue_bit(
+            interfaces::BoardValidationIssue::RangefinderEvidenceMissing);
+    }
+    if (!rangefinder_pin_configuration_valid()) {
+        report.issues |= issue_bit(
+            interfaces::BoardValidationIssue::InvalidRangefinderPinConfiguration);
+    }
+    if (rangefinder_actuator_pin_conflict()) {
+        report.issues |= issue_bit(
+            interfaces::BoardValidationIssue::RangefinderActuatorPinConflict);
     }
 #endif
 

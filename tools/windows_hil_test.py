@@ -2,7 +2,7 @@
 """Windows board-level HIL diagnostic for Shahbaz ESP32-S3 USB CDC firmware.
 
 The hardware test is deliberately non-actuating: it validates the wire codec,
-synchronization/heartbeat safety path, device identity/status, both I2C sensor
+synchronization/heartbeat safety path, device identity/status, all configured I2C sensor
 telemetry streams, ping/pong, CRC rejection/resynchronization, and clean
 telemetry stop.  Actuator/control messages are blocked by this host tool, and a
 hardware run only passes when firmware reports that all actuators are disabled.
@@ -40,6 +40,13 @@ SHT30_MAX_TEMPERATURE_JUMP_MDEG_C = 10_000
 SHT30_MAX_HUMIDITY_JUMP_MILLI_PERCENT = 25_000
 MS5611_MAX_PRESSURE_JUMP_PA = 2_000
 MS5611_MAX_TEMPERATURE_JUMP_MDEG_C = 10_000
+VL53L0X_MAX_DISTANCE_JUMP_MM = 1_000
+RANGEFINDER_ROLES = {
+    0: "GROUND",
+    1: "UP",
+    2: "FRONT_LEFT",
+    3: "FRONT_RIGHT",
+}
 
 
 class MessageType(enum.IntEnum):
@@ -69,6 +76,7 @@ class MessageType(enum.IntEnum):
     MOTOR_COMMAND = 0x8011
     SERVO_COMMAND = 0x8012
     SET_CONTROL_MODE = 0x8013
+    MOTOR_FRAME_COMMAND = 0x8014
 
 
 class Priority(enum.IntEnum):
@@ -122,6 +130,7 @@ SESSION_BOUND_TYPES = frozenset({
     MessageType.MOTOR_COMMAND,
     MessageType.SERVO_COMMAND,
     MessageType.SET_CONTROL_MODE,
+    MessageType.MOTOR_FRAME_COMMAND,
 })
 
 # Defense in depth for this sensor/USB HIL.  Keeping the message definitions in
@@ -134,6 +143,7 @@ HIL_FORBIDDEN_TRANSMIT_TYPES = frozenset({
     MessageType.MOTOR_COMMAND,
     MessageType.SERVO_COMMAND,
     MessageType.SET_CONTROL_MODE,
+    MessageType.MOTOR_FRAME_COMMAND,
 })
 
 
@@ -153,6 +163,15 @@ class CommunicationState(enum.IntEnum):
     TRAFFIC_PRESENT_BUT_INVALID = 2
     HEARTBEAT_MISSING = 3
     HEALTHY = 4
+
+
+class RangefinderLifecycle(enum.IntEnum):
+    """Per-role lifecycle appended to an extended DeviceStatusResponse."""
+
+    DISABLED_OR_ABSENT = 0
+    INITIALIZING = 1
+    LIVE = 2
+    DEGRADED = 3
 
 
 @dataclasses.dataclass(frozen=True)
@@ -186,6 +205,19 @@ class CommandNack:
     request_sequence: int
     reason: NackReason
     validation: ValidationError
+
+
+@dataclasses.dataclass(frozen=True)
+class DeviceStatus:
+    safety_state: SafetyState
+    communication_state: CommunicationState
+    telemetry_enabled: bool
+    armed: bool
+    sht30_online: bool
+    ms5611_online: bool
+    # None means a legacy six-byte response. It is unknown capability evidence,
+    # and must not be interpreted as DISABLED_OR_ABSENT.
+    rangefinders: Optional[tuple[RangefinderLifecycle, ...]]
 
 
 class ProtocolError(RuntimeError):
@@ -300,6 +332,48 @@ def parse_command_nack(frame: Frame) -> CommandNack:
     return CommandNack(request_sequence, reason, validation)
 
 
+def parse_device_status(frame: Frame) -> DeviceStatus:
+    """Decode legacy 6-byte or lifecycle-extended 10-byte device status."""
+    if frame.message_type != MessageType.DEVICE_STATUS_RESPONSE:
+        raise ProtocolError(
+            f"expected DEVICE_STATUS_RESPONSE, got {frame.message_type.name}"
+        )
+    if len(frame.payload) not in (6, 10):
+        raise ProtocolError(
+            f"DEVICE_STATUS_RESPONSE payload must be 6 or 10 bytes, "
+            f"got {len(frame.payload)}"
+        )
+    try:
+        safety_state = SafetyState(frame.payload[0])
+        communication_state = CommunicationState(frame.payload[1])
+    except ValueError as exc:
+        raise ProtocolError(f"DEVICE_STATUS_RESPONSE contains unknown state: {exc}") from exc
+    boolean_values = frame.payload[2:6]
+    if any(value not in (0, 1) for value in boolean_values):
+        raise ProtocolError(
+            "DEVICE_STATUS_RESPONSE boolean fields must be encoded as 0 or 1"
+        )
+    rangefinders: Optional[tuple[RangefinderLifecycle, ...]] = None
+    if len(frame.payload) == 10:
+        try:
+            rangefinders = tuple(
+                RangefinderLifecycle(value) for value in frame.payload[6:10]
+            )
+        except ValueError as exc:
+            raise ProtocolError(
+                f"DEVICE_STATUS_RESPONSE contains unknown rangefinder lifecycle: {exc}"
+            ) from exc
+    return DeviceStatus(
+        safety_state=safety_state,
+        communication_state=communication_state,
+        telemetry_enabled=bool(boolean_values[0]),
+        armed=bool(boolean_values[1]),
+        sht30_online=bool(boolean_values[2]),
+        ms5611_online=bool(boolean_values[3]),
+        rangefinders=rangefinders,
+    )
+
+
 class StreamDecoder:
     def __init__(self) -> None:
         self._packet = bytearray()
@@ -356,13 +430,21 @@ def parse_sensor_sample(payload: bytes) -> dict:
 
 
 def validate_sensor_sample(sample: dict) -> str:
-    if sample["instance_id"] != 0:
-        raise ProtocolError("unexpected sensor instance")
+    sensor_id = sample["sensor_id"]
+    instance_id = sample["instance_id"]
+    if sensor_id in (1, 2) and instance_id != 0:
+        raise ProtocolError("unexpected legacy sensor instance")
+    if sensor_id == 3 and instance_id not in RANGEFINDER_ROLES:
+        raise ProtocolError(f"unexpected VL53L0X instance {instance_id}")
     # Every published sample must have passed transport CRC, sensor timing and
     # plausibility checks. MS5611 additionally requires valid PROM calibration.
-    common_validity = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 4)
+    common_validity = ((1 << 0) | (1 << 2) | (1 << 3) | (1 << 4)
+                       if sensor_id == 3 else
+                       (1 << 0) | (1 << 1) | (1 << 3) | (1 << 4))
     if (sample["validity"] & common_validity) != common_validity:
         raise ProtocolError(f"sample validity flags incomplete: 0x{sample['validity']:08x}")
+    if sensor_id == 3 and (sample["validity"] & (1 << 1)) != 0:
+        raise ProtocolError("VL53L0X must not claim an unavailable wire CRC")
     if (sample["quality"] & 1) == 0:
         raise ProtocolError(f"sample is not marked Fresh: 0x{sample['quality']:08x}")
     if sample["quality"] != 1:
@@ -400,12 +482,31 @@ def validate_sensor_sample(sample: dict) -> str:
         if not -40_000 <= temp <= 85_000:
             raise ProtocolError(f"MS5611 temperature out of plausible range: {temp} mdegC")
         return f"MS5611 pressure={pressure} Pa temp={temp/1000:.3f} C"
+    if sample["sensor_id"] == 3:  # VL53L0X
+        if set(fields) != {5, 6, 7}:
+            raise ProtocolError(f"VL53L0X fields are {sorted(fields)}, expected [5, 6, 7]")
+        if any(fields[field_id][0] != 2 for field_id in (5, 6, 7)):
+            raise ProtocolError("VL53L0X fields must all be Unsigned32")
+        distance, raw_status, signal_quality = (
+            fields[5][1], fields[6][1], fields[7][1]
+        )
+        if not 30 <= distance <= 2_000:
+            raise ProtocolError(f"VL53L0X distance outside control range: {distance} mm")
+        if raw_status not in (0, 11):
+            raise ProtocolError(f"VL53L0X range status is not control-eligible: {raw_status}")
+        if signal_quality != 100:
+            raise ProtocolError(
+                f"VL53L0X valid-evidence quality must be 100, got {signal_quality}"
+            )
+        return (f"VL53L0X {RANGEFINDER_ROLES[instance_id]} "
+                f"distance={distance} mm status={raw_status} quality={signal_quality}%")
     raise ProtocolError(f"unexpected sensor id {sample['sensor_id']}")
 
 
 def validate_sensor_progression(previous: dict, current: dict) -> None:
-    if current["sensor_id"] != previous["sensor_id"]:
-        raise ProtocolError("cannot compare progression from different sensors")
+    if (current["sensor_id"], current["instance_id"]) != (
+            previous["sensor_id"], previous["instance_id"]):
+        raise ProtocolError("cannot compare progression from different sensor instances")
     expected_sequence = (previous["sequence"] + 1) & 0xFFFFFFFF
     if current["sequence"] != expected_sequence:
         raise ProtocolError(
@@ -433,6 +534,11 @@ def validate_sensor_progression(previous: dict, current: dict) -> None:
              MS5611_MAX_PRESSURE_JUMP_PA, "Pa"),
             ("temperature", abs(new_fields[4][1] - old_fields[4][1]),
              MS5611_MAX_TEMPERATURE_JUMP_MDEG_C, "mdegC"),
+        )
+    elif current["sensor_id"] == 3:
+        jumps = (
+            ("distance", abs(new_fields[5][1] - old_fields[5][1]),
+             VL53L0X_MAX_DISTANCE_JUMP_MM, "mm"),
         )
     else:
         raise ProtocolError(f"unexpected sensor id {current['sensor_id']}")
@@ -470,6 +576,15 @@ def print_sensor_summary(samples: list[dict]) -> None:
             f"[SUMMARY] MS5611 {common} PROM/calibration_CRC=PASS "
             f"pressure={min(pressures)}..{max(pressures)} Pa "
             f"temperature={min(temperatures):.3f}..{max(temperatures):.3f} C"
+        )
+    elif sensor_id == 3:
+        instance_id = samples[0]["instance_id"]
+        if instance_id not in RANGEFINDER_ROLES:
+            raise ValueError(f"unexpected VL53L0X instance {instance_id}")
+        distances = [s["fields"][5][1] for s in samples]
+        print(
+            f"[SUMMARY] VL53L0X {RANGEFINDER_ROLES[instance_id]} {common} "
+            f"distance={min(distances)}..{max(distances)} mm"
         )
     else:
         raise ValueError(f"unexpected sensor id {sensor_id}")
@@ -541,6 +656,56 @@ def self_test() -> None:
         else:
             raise AssertionError("malformed/unknown COMMAND_NACK was accepted")
 
+    legacy_status_frame = Frame(
+        MessageType.DEVICE_STATUS_RESPONSE,
+        Priority.HIGH,
+        100,
+        124,
+        bytes((SafetyState.DISARMED, CommunicationState.HEALTHY, 1, 0, 1, 0)),
+    )
+    legacy_status = parse_device_status(legacy_status_frame)
+    assert legacy_status.safety_state == SafetyState.DISARMED
+    assert legacy_status.communication_state == CommunicationState.HEALTHY
+    assert legacy_status.telemetry_enabled and not legacy_status.armed
+    assert legacy_status.sht30_online and not legacy_status.ms5611_online
+    assert legacy_status.rangefinders is None
+
+    extended_status_frame = dataclasses.replace(
+        legacy_status_frame,
+        payload=legacy_status_frame.payload + bytes((0, 1, 2, 3)),
+    )
+    extended_status = parse_device_status(extended_status_frame)
+    assert extended_status.rangefinders == (
+        RangefinderLifecycle.DISABLED_OR_ABSENT,
+        RangefinderLifecycle.INITIALIZING,
+        RangefinderLifecycle.LIVE,
+        RangefinderLifecycle.DEGRADED,
+    )
+    for invalid_status in (
+        dataclasses.replace(legacy_status_frame, payload=bytes(7)),
+        dataclasses.replace(legacy_status_frame, payload=bytes(9)),
+        dataclasses.replace(legacy_status_frame, payload=bytes(11)),
+        dataclasses.replace(
+            extended_status_frame,
+            payload=extended_status_frame.payload[:-1] + bytes((4,)),
+        ),
+        dataclasses.replace(
+            legacy_status_frame,
+            payload=legacy_status_frame.payload[:2] + bytes((2, 0, 1, 0)),
+        ),
+        dataclasses.replace(
+            legacy_status_frame,
+            payload=bytes((7, CommunicationState.HEALTHY, 1, 0, 1, 0)),
+        ),
+        dataclasses.replace(legacy_status_frame, message_type=MessageType.COMMAND_ACK),
+    ):
+        try:
+            parse_device_status(invalid_status)
+        except ProtocolError:
+            pass
+        else:
+            raise AssertionError("malformed DEVICE_STATUS_RESPONSE was accepted")
+
     # Sample parser signed/unsigned behavior and exact sizing.
     sample = (bytes([1, 0]) + struct.pack("<IQIII", 7, 99, 0x1B, 1, 0) + bytes([2]) +
               struct.pack("<BBi", 1, 1, -1250) + struct.pack("<BBI", 2, 2, 50123))
@@ -554,6 +719,30 @@ def self_test() -> None:
     parsed_ms = parse_sensor_sample(ms_sample)
     assert parsed_ms["fields"][3][1] == 101325
     assert "MS5611" in validate_sensor_sample(parsed_ms)
+
+    for instance_id, role in RANGEFINDER_ROLES.items():
+        range_sample = (
+            bytes([3, instance_id]) +
+            struct.pack("<IQIII", 20 + instance_id, 200 + instance_id, 0x1D, 1, 0) +
+            bytes([3]) +
+            struct.pack("<BBI", 5, 2, 500 + instance_id) +
+            struct.pack("<BBI", 6, 2, 0) +
+            struct.pack("<BBI", 7, 2, 100)
+        )
+        parsed_range = parse_sensor_sample(range_sample)
+        description = validate_sensor_sample(parsed_range)
+        assert role in description
+        assert parsed_range["fields"][5][1] == 500 + instance_id
+
+    invalid_range = dict(parsed_range)
+    invalid_range["fields"] = dict(parsed_range["fields"])
+    invalid_range["fields"][6] = (2, 2)
+    try:
+        validate_sensor_sample(invalid_range)
+    except ProtocolError as exc:
+        assert "status" in str(exc)
+    else:
+        raise AssertionError("invalid VL53L0X range status was accepted")
 
     # Repeated-sample checks require an exact modulo-u32 sequence increment,
     # forward sensor time, and bounded physical movement.
@@ -590,6 +779,17 @@ def self_test() -> None:
     wrap_current = dict(parsed_ms)
     wrap_current.update(sequence=0, timestamp_us=600)
     validate_sensor_progression(wrap_previous, wrap_current)
+
+    range_previous = parse_sensor_sample(
+        bytes([3, 0]) + struct.pack("<IQIII", 0xFFFFFFFF, 700, 0x1D, 1, 0) +
+        bytes([3]) + struct.pack("<BBI", 5, 2, 600) +
+        struct.pack("<BBI", 6, 2, 11) + struct.pack("<BBI", 7, 2, 100)
+    )
+    range_current = dict(range_previous)
+    range_current["fields"] = dict(range_previous["fields"])
+    range_current.update(sequence=0, timestamp_us=800)
+    range_current["fields"][5] = (2, 650)
+    validate_sensor_progression(range_previous, range_current)
 
     assert abs(barometric_altitude_m(101325)) < 0.001
     assert 995.0 <= barometric_altitude_m(89875) <= 1005.0
@@ -770,6 +970,17 @@ def self_test() -> None:
         assert "non-actuating HIL" in str(exc)
     else:
         raise AssertionError("HIL transmitter allowed a motor command")
+    assert len(capture.wires) == wire_count
+    try:
+        test_session.send(
+            MessageType.MOTOR_FRAME_COMMAND,
+            b"\x04\x00\x84\x03\x01\x84\x03\x02\x84\x03\x03\x84\x03",
+            Priority.CRITICAL,
+        )
+    except ProtocolError as exc:
+        assert "non-actuating HIL" in str(exc)
+    else:
+        raise AssertionError("HIL transmitter allowed a coherent motor frame")
     assert len(capture.wires) == wire_count
 
     print(
@@ -1236,7 +1447,8 @@ def run_reconnect_session_test(serial_port, port_name: str, serial_module,
 def run_hardware(port_name: str, serial_module, sensor_timeout_s: float,
                  actuator_test: bool, _props_removed: bool, qnh_hpa: float,
                  sensor_sample_count: int, reconnect_test: bool,
-                 reconnect_timeout_s: float) -> None:
+                 reconnect_timeout_s: float,
+                 require_rangefinders: bool) -> None:
     if actuator_test:
         raise RuntimeError(
             "--actuator-test is disabled: this HIL is strictly non-actuating and requires "
@@ -1329,25 +1541,68 @@ def run_hardware(port_name: str, serial_module, sensor_timeout_s: float,
 
         session.send(MessageType.DEVICE_STATUS_REQUEST)
         status = link.wait_for([MessageType.DEVICE_STATUS_RESPONSE, MessageType.COMMAND_NACK], 2.0)
-        if status.message_type != MessageType.DEVICE_STATUS_RESPONSE or len(status.payload) != 6:
+        if status.message_type != MessageType.DEVICE_STATUS_RESPONSE:
             raise RuntimeError("device-status request failed")
-        safety_state, comm_state, _telemetry, armed, _sht, _ms = status.payload
-        if safety_state == SafetyState.FAULT:
+        device_status = parse_device_status(status)
+        if device_status.safety_state == SafetyState.FAULT:
             raise RuntimeError("firmware reports FAULT (check N16R8 memory profile and boot log)")
-        if safety_state != SafetyState.DISARMED or comm_state != CommunicationState.HEALTHY or armed != 0:
-            raise RuntimeError(f"unexpected safe status: safety={safety_state} comm={comm_state} armed={armed}")
+        if (device_status.safety_state != SafetyState.DISARMED or
+                device_status.communication_state != CommunicationState.HEALTHY or
+                device_status.armed):
+            raise RuntimeError(
+                "unexpected safe status: "
+                f"safety={device_status.safety_state.name} "
+                f"comm={device_status.communication_state.name} "
+                f"armed={device_status.armed}"
+            )
         print("[PASS] safe DISARMED + healthy-link status")
+        if device_status.rangefinders is None:
+            print("[INFO] legacy DeviceStatus has no per-rangefinder lifecycle evidence")
+        else:
+            lifecycle_summary = ", ".join(
+                f"{RANGEFINDER_ROLES[index]}={lifecycle.name}"
+                for index, lifecycle in enumerate(device_status.rangefinders)
+            )
+            print(f"[PASS] rangefinder lifecycle decoded: {lifecycle_summary}")
+        if require_rangefinders:
+            if device_status.rangefinders is None:
+                raise RuntimeError(
+                    "--require-rangefinders requires the extended 10-byte DeviceStatusResponse"
+                )
+            non_live = {
+                RANGEFINDER_ROLES[index]: lifecycle.name
+                for index, lifecycle in enumerate(device_status.rangefinders)
+                if lifecycle != RangefinderLifecycle.LIVE
+            }
+            if non_live:
+                raise RuntimeError(
+                    f"required rangefinders are not all LIVE: {non_live}"
+                )
+            print("[PASS] all four required rangefinder lifecycle states are LIVE")
 
         for sensor_id, name in ((1, "SHT30"), (2, "MS5611")):
             req = session.send(MessageType.SET_SENSOR_RATE, struct.pack("<BBI", sensor_id, 0, 100_000))
             session.expect_ack(req)
             print(f"[PASS] {name} runtime sampling-rate command")
+        if require_rangefinders:
+            for instance_id, role in RANGEFINDER_ROLES.items():
+                req = session.send(
+                    MessageType.SET_SENSOR_RATE,
+                    struct.pack("<BBI", 3, instance_id, 100_000),
+                )
+                session.expect_ack(req)
+                print(f"[PASS] VL53L0X {role} runtime sampling-rate command")
 
         req = session.send(MessageType.START_TELEMETRY)
         session.expect_ack(req)
         print("[PASS] telemetry start")
 
-        sample_series: dict[int, list[dict]] = {1: [], 2: []}
+        required_sensor_keys = [(1, 0), (2, 0)]
+        if require_rangefinders:
+            required_sensor_keys.extend((3, instance) for instance in RANGEFINDER_ROLES)
+        sample_series: dict[tuple[int, int], list[dict]] = {
+            key: [] for key in required_sensor_keys
+        }
         deadline = time.monotonic() + sensor_timeout_s
         next_heartbeat = time.monotonic() + 0.35
         while (time.monotonic() < deadline and
@@ -1361,8 +1616,11 @@ def run_hardware(port_name: str, serial_module, sensor_timeout_s: float,
             except TimeoutError:
                 continue
             sample = parse_sensor_sample(frame.payload)
+            sample_key = (sample["sensor_id"], sample["instance_id"])
+            if sample_key not in sample_series:
+                continue
             description = validate_sensor_sample(sample)
-            series = sample_series[sample["sensor_id"]]
+            series = sample_series[sample_key]
             if series:
                 validate_sensor_progression(series[-1], sample)
             series.append(sample)
@@ -1370,26 +1628,33 @@ def run_hardware(port_name: str, serial_module, sensor_timeout_s: float,
                 f"[PASS] valid {description} seq={sample['sequence']} "
                 f"sensor_timestamp_us={sample['timestamp_us']} CRC=PASS"
             )
-        missing = {sid for sid, series in sample_series.items()
+        missing = {key for key, series in sample_series.items()
                    if len(series) < sensor_sample_count}
         if missing:
-            names = ["SHT30" if sid == 1 else "MS5611" for sid in sorted(missing)]
+            def sensor_name(key: tuple[int, int]) -> str:
+                sensor_id, instance_id = key
+                if sensor_id == 1:
+                    return "SHT30"
+                if sensor_id == 2:
+                    return "MS5611"
+                return f"VL53L0X {RANGEFINDER_ROLES[instance_id]}"
+            names = [sensor_name(key) for key in sorted(missing)]
             counts = ", ".join(
-                f"{('SHT30' if sid == 1 else 'MS5611')}={len(sample_series[sid])}/"
-                f"{sensor_sample_count}" for sid in sorted(missing)
+                f"{sensor_name(key)}={len(sample_series[key])}/{sensor_sample_count}"
+                for key in sorted(missing)
             )
             raise RuntimeError(
                 "insufficient valid telemetry from " + ", ".join(names) + f" ({counts}); "
                 "check 3.3V/GND, SDA=GPIO8, SCL=GPIO9, addresses 0x44/0x77, "
-                "and pull-ups"
+                "rangefinder XSHUT/address assignment when requested, and pull-ups"
             )
 
-        print_sensor_summary(sample_series[1])
-        print_sensor_summary(sample_series[2])
+        for key in required_sensor_keys:
+            print_sensor_summary(sample_series[key])
 
         # Both altitude calculations deliberately consume this exact same real
         # MS5611 sample so a QNH/unit regression cannot hide behind sample drift.
-        pressure_sample = sample_series[2][-1]
+        pressure_sample = sample_series[(2, 0)][-1]
         pressure_pa = pressure_sample["fields"][3][1]
         altitude_m = barometric_altitude_m(pressure_pa, qnh_hpa)
         additional_qnh_hpa = 1000.0 if math.isclose(qnh_hpa, 1013.25, abs_tol=0.01) else 1013.25
@@ -1480,7 +1745,7 @@ def execute(args: argparse.Namespace) -> int:
         run_hardware(port_name, serial_module, args.sensor_timeout,
                      args.actuator_test, args.props_removed, args.qnh_hpa,
                      args.sensor_samples, args.reconnect_test,
-                     args.reconnect_timeout)
+                     args.reconnect_timeout, args.require_rangefinders)
         return 0
     except (AssertionError, OSError, ProtocolError, RuntimeError, TimeoutError, ValueError) as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
@@ -1492,7 +1757,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--self-test", action="store_true", help="run codec tests only; no board needed")
     parser.add_argument("--port", help="Windows COM port for Shahbaz native USB CDC (for example COM7)")
     parser.add_argument("--sensor-timeout", type=float, default=12.0,
-                        help="seconds to collect the requested valid samples from both sensors")
+                        help="seconds to collect valid samples from every required sensor channel")
     parser.add_argument("--sensor-samples", type=int, default=DEFAULT_SENSOR_SAMPLE_COUNT,
                         help=f"minimum repeated samples per sensor (default {DEFAULT_SENSOR_SAMPLE_COUNT})")
     parser.add_argument("--qnh-hpa", type=float, default=1013.25,
@@ -1503,6 +1768,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--reconnect-timeout", type=float,
                         default=DEFAULT_RECONNECT_TIMEOUT_S,
                         help=f"seconds to wait for detach + re-enumeration (default {DEFAULT_RECONNECT_TIMEOUT_S:g})")
+    parser.add_argument(
+        "--require-rangefinders",
+        action="store_true",
+        help="require valid repeated samples from VL53L0X instances 0..3; use only with the reviewed range profile",
+    )
     parser.add_argument("--actuator-test", action="store_true",
                         help="legacy option retained for CLI compatibility; always rejected")
     parser.add_argument("--props-removed", action="store_true",

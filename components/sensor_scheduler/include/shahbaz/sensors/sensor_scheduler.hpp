@@ -9,12 +9,14 @@
 
 #include "sensor_ms5611/ms5611_domain.hpp"
 #include "sensor_sht30/sht3x_domain.hpp"
+#include "sensor_vl53l0x/vl53l0x_array.hpp"
 #include "shahbaz/interfaces/i2c_bus.hpp"
 #include "shahbaz/interfaces/monotonic_clock.hpp"
 #include "shahbaz/interfaces/sample_publisher.hpp"
 
 #include <array>
 #include <cstdint>
+#include <optional>
 
 namespace shahbaz::sensors::scheduler {
 
@@ -259,6 +261,7 @@ enum class ScheduledSensor : std::uint8_t {
     None = 0,
     Sht3x,
     Ms5611,
+    Vl53l0x,
 };
 
 struct SchedulerStepResult final {
@@ -273,7 +276,9 @@ class SharedSensorScheduler final {
                           interfaces::IMonotonicClock& clock,
                           interfaces::ISamplePublisher& publisher,
                           Sht3xConfig sht_config = {},
-                          Ms5611Config ms_config = {}) noexcept;
+                          Ms5611Config ms_config = {},
+                          interfaces::ISensorShutdownBank* rangefinder_shutdown = nullptr,
+                          vl53l0x::ArrayConfig rangefinder_config = {}) noexcept;
 
     /** Advances at most one sensor and therefore at most one bus operation. */
     [[nodiscard]] auto step() noexcept -> SchedulerStepResult;
@@ -281,14 +286,18 @@ class SharedSensorScheduler final {
 
     [[nodiscard]] auto sht3x() const noexcept -> const Sht3xStateMachine&;
     [[nodiscard]] auto ms5611() const noexcept -> const Ms5611StateMachine&;
+    [[nodiscard]] auto vl53l0x_array() const noexcept
+        -> const vl53l0x::ArrayDriver*;
     [[nodiscard]] auto set_sht3x_interval_us(std::uint32_t interval_us) noexcept -> bool;
     [[nodiscard]] auto set_ms5611_interval_us(std::uint32_t interval_us) noexcept -> bool;
+    [[nodiscard]] auto set_vl53l0x_interval_us(std::uint32_t interval_us) noexcept -> bool;
 
   private:
     interfaces::IMonotonicClock& clock_;
     Sht3xStateMachine sht3x_;
     Ms5611StateMachine ms5611_;
-    ScheduledSensor next_when_both_{ScheduledSensor::Sht3x};
+    std::optional<vl53l0x::ArrayDriver> vl53l0x_{};
+    std::uint8_t round_robin_index_{};
     std::uint64_t bus_settle_until_us_{};
 };
 

@@ -1,7 +1,7 @@
 idf_component_register(
     SRCS "src/sensor_scheduler.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES interfaces domain sensor_sht30 sensor_ms5611
+    REQUIRES interfaces domain sensor_sht30 sensor_ms5611 sensor_vl53l0x
 )
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_17)

@@ -89,6 +89,32 @@ int main() {
                        "native USB GPIO cannot become an actuator output");
     failures += expect(!shahbaz::board::is_actuator_gpio_candidate(0),
                        "strapping GPIO cannot become an actuator output");
+    failures += expect(
+        shahbaz::board::is_valid_vl53l0x_xshut_pins(
+            shahbaz::board::kDefaultVl53l0xXshutGpio),
+        "default GPIO12..15 XSHUT proposal is electrically eligible");
+    failures += expect(
+        !shahbaz::board::is_valid_vl53l0x_xshut_pins({{12, 12, 14, 15}}),
+        "XSHUT pins must be unique");
+    failures += expect(
+        !shahbaz::board::is_valid_vl53l0x_xshut_pins({{8, 13, 14, 15}}),
+        "XSHUT cannot overlap SDA");
+    failures += expect(
+        !shahbaz::board::is_valid_vl53l0x_xshut_pins({{19, 13, 14, 15}}),
+        "XSHUT cannot use native USB");
+    failures += expect(
+        !shahbaz::board::is_valid_vl53l0x_xshut_pins({{0, 13, 14, 15}}),
+        "XSHUT cannot use a strapping-sensitive GPIO");
+    constexpr std::array<std::int32_t, 6U> default_actuators{{4, 5, 6, 7, 10, 11}};
+    failures += expect(
+        !shahbaz::board::vl53l0x_xshut_conflicts(
+            shahbaz::board::kDefaultVl53l0xXshutGpio, default_actuators),
+        "default XSHUT proposal does not overlap default actuators");
+    constexpr std::array<std::int32_t, 2U> conflicting_outputs{{15, 18}};
+    failures += expect(
+        shahbaz::board::vl53l0x_xshut_conflicts(
+            shahbaz::board::kDefaultVl53l0xXshutGpio, conflicting_outputs),
+        "cross-peripheral XSHUT conflicts are detected");
     failures += expect(shahbaz::board::onboard_rgb_gpio(BoardRevision::YdEsp32S3V1_4) == 48,
                        "verified YD-ESP32-S3 V1.4 profile maps onboard RGB to GPIO48");
 

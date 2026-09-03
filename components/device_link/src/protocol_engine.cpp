@@ -63,6 +63,7 @@ bool ProtocolEngine::sessionBound(const protocol::MessageType type) noexcept {
         case protocol::MessageType::MotorCommand:
         case protocol::MessageType::ServoCommand:
         case protocol::MessageType::SetControlMode:
+        case protocol::MessageType::MotorFrameCommand:
             return true;
         default:
             return false;
@@ -206,9 +207,21 @@ auto ProtocolEngine::applyAction(const command::DispatchResult& result,
             return true;
         case command::ApplicationAction::SetSensorRate:
             if (!result.sensor_rate.present) return false;
-            return result.sensor_rate.sensor_id == command::SensorId::Sht3x
-                       ? sensors_.set_sht3x_interval_us(result.sensor_rate.interval_us)
-                       : sensors_.set_ms5611_interval_us(result.sensor_rate.interval_us);
+            switch (result.sensor_rate.sensor_id) {
+                case command::SensorId::Sht3x:
+                    return sensors_.set_sht3x_interval_us(
+                        result.sensor_rate.interval_us);
+                case command::SensorId::Ms5611:
+                    return sensors_.set_ms5611_interval_us(
+                        result.sensor_rate.interval_us);
+                case command::SensorId::Vl53l0x:
+                    // All four instances share one fair acquisition cadence;
+                    // the validated instance identifies the caller's intent
+                    // but cannot create asymmetric bus starvation.
+                    return sensors_.set_vl53l0x_interval_us(
+                        result.sensor_rate.interval_us);
+            }
+            return false;
         case command::ApplicationAction::MotorCommand:
         case command::ApplicationAction::ServoCommand:
         case command::ApplicationAction::ActuatorCommand:
@@ -216,6 +229,17 @@ auto ProtocolEngine::applyAction(const command::DispatchResult& result,
             if (actuator_.writePulseUs(result.actuator.kind,
                                        result.actuator.channel,
                                        result.actuator.pulse_us) != safety::ActuatorStatus::Ok) {
+                safety_.reportActuatorFailure();
+                return false;
+            }
+            return true;
+        case command::ApplicationAction::MotorFrameCommand:
+            if (!result.motor_frame.present) return false;
+            if (actuator_.writeMotorFrame(result.motor_frame.pulse_us) !=
+                safety::ActuatorStatus::Ok) {
+                // The controller contract already forces all outputs safe on
+                // a frame-application failure. Latch the system fault too so
+                // no later command can silently resume a partial generation.
                 safety_.reportActuatorFailure();
                 return false;
             }
@@ -306,7 +330,16 @@ void ProtocolEngine::sendReply(const command::DispatchResult& result,
             payload[3] = actuator_.armed() ? 1U : 0U;
             payload[4] = sensors_.sht3x().health().online ? 1U : 0U;
             payload[5] = sensors_.ms5611().health().online ? 1U : 0U;
-            size = 6U;
+            const auto* const rangefinders = sensors_.vl53l0x_array();
+            for (std::size_t instance = 0U;
+                 instance < sensors::vl53l0x::kSensorCount;
+                 ++instance) {
+                const auto lifecycle = rangefinders == nullptr
+                    ? sensors::vl53l0x::Lifecycle::DisabledOrAbsent
+                    : rangefinders->lifecycle(instance);
+                payload[6U + instance] = static_cast<std::uint8_t>(lifecycle);
+            }
+            size = 10U;
             break;
         }
         case command::ReplyKind::None:

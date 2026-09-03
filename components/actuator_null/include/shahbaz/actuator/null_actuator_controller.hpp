@@ -18,6 +18,11 @@ class NullActuatorController final : public safety::IActuatorController {
         -> safety::ActuatorStatus override {
         return safety::ActuatorStatus::Unavailable;
     }
+    [[nodiscard]] auto writeMotorFrame(
+        const safety::QuadMotorPulseFrame&) noexcept
+        -> safety::ActuatorStatus override {
+        return safety::ActuatorStatus::Unavailable;
+    }
     [[nodiscard]] auto outputsEnabled() const noexcept -> bool override { return false; }
     [[nodiscard]] auto armed() const noexcept -> bool override { return false; }
     [[nodiscard]] auto available() const noexcept -> bool override { return false; }

@@ -150,4 +150,46 @@ auto EspIdfPwmActuatorController::writePulseUs(const safety::ActuatorKind kind,
     return safety::ActuatorStatus::Ok;
 }
 
+auto EspIdfPwmActuatorController::writeMotorFrame(
+    const safety::QuadMotorPulseFrame& pulse_us) noexcept -> safety::ActuatorStatus {
+    if (!initialized_) {
+        forceSafe(safety::SafeStopReason::ActuatorCommandRejected);
+        return safety::ActuatorStatus::NotInitialized;
+    }
+    if (!armed_) {
+        forceSafe(safety::SafeStopReason::ActuatorCommandRejected);
+        return safety::ActuatorStatus::NotArmed;
+    }
+
+    std::array<std::uint32_t, safety::kQuadMotorCount> duties{};
+    for (std::size_t index = 0U; index < pulse_us.size(); ++index) {
+        if (pulse_us[index] < 900U || pulse_us[index] > 2100U) {
+            forceSafe(safety::SafeStopReason::ActuatorCommandRejected);
+            return safety::ActuatorStatus::InvalidValue;
+        }
+        duties[index] = pulse_us_to_duty(
+            pulse_us[index], config_.motor_frequency_hz, kResolutionBits);
+    }
+
+    // Stage all four duty values before making any channel live. LEDC does not
+    // provide a cross-channel simultaneous-latch operation, so update_duty()
+    // calls below are sequential. A failure at either stage immediately stops
+    // all motor and servo channels, preventing a persistent partial frame.
+    for (std::size_t index = 0U; index < duties.size(); ++index) {
+        if (ledc_set_duty(kMode, kMotorChannels[index], duties[index]) != ESP_OK) {
+            forceSafe(safety::SafeStopReason::Fault);
+            return safety::ActuatorStatus::HardwareError;
+        }
+    }
+    for (const auto channel : kMotorChannels) {
+        if (ledc_update_duty(kMode, channel) != ESP_OK) {
+            forceSafe(safety::SafeStopReason::Fault);
+            return safety::ActuatorStatus::HardwareError;
+        }
+    }
+
+    outputs_enabled_ = true;
+    return safety::ActuatorStatus::Ok;
+}
+
 }  // namespace shahbaz::actuator
