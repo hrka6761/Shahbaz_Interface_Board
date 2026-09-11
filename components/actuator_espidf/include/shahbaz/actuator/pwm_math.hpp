@@ -13,7 +13,11 @@ namespace shahbaz::actuator {
         return 0U;
     }
     const auto levels = UINT32_C(1) << resolution_bits;
-    const auto numerator = static_cast<std::uint64_t>(pulse_us) * frequency_hz * levels;
+    const auto pulse_period_fraction = static_cast<std::uint64_t>(pulse_us) * frequency_hz;
+    // Saturate before multiplying by the resolution. The public integer input
+    // ranges can otherwise overflow uint64_t, then truncate again to uint32_t.
+    if (pulse_period_fraction >= 1'000'000U) return levels - 1U;
+    const auto numerator = pulse_period_fraction * levels;
     auto duty = static_cast<std::uint32_t>((numerator + 500'000ULL) / 1'000'000ULL);
     if (duty >= levels) duty = levels - 1U;
     return duty;

@@ -44,6 +44,8 @@ struct UsbConnectionSnapshot final {
 /** Native ESP32-S3 USB-OTG CDC-ACM transport for delimited protocol frames. */
 class EspIdfUsbCdcTransport final : public interfaces::ITelemetryTransport {
   public:
+    // Bound each callback/application RX slice to one queue's worth of chunks.
+    static constexpr std::size_t kRxServiceChunkBudget = 8U;
     explicit EspIdfUsbCdcTransport(interfaces::IMonotonicClock& clock) noexcept : clock_(clock) {}
     ~EspIdfUsbCdcTransport() override = default;
 
@@ -84,7 +86,7 @@ class EspIdfUsbCdcTransport final : public interfaces::ITelemetryTransport {
 
   private:
     static constexpr std::size_t kRxChunkBytes = 256U;
-    static constexpr std::size_t kRxQueueDepth = 8U;
+    static constexpr std::size_t kRxQueueDepth = kRxServiceChunkBudget;
     static constexpr std::size_t kTxQueueDepth = 12U;
     static constexpr std::uint32_t kMountedFlag = 1U << 0U;
     static constexpr std::uint32_t kDtrOpenFlag = 1U << 1U;
@@ -107,6 +109,7 @@ class EspIdfUsbCdcTransport final : public interfaces::ITelemetryTransport {
         std::uint32_t order{};
         std::uint32_t epoch{};
         bool used{};
+        bool terminating_expired_frame{};
     };
 
     static void deviceEvent(tinyusb_event_t* event, void* arg);

@@ -20,6 +20,21 @@ function(shahbaz_test target)
     add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
+shahbaz_test(usb_transport_test
+    "${SHAHBAZ_ROOT}/components/usb_transport_espidf/test/usb_transport_test.cpp"
+    "${SHAHBAZ_ROOT}/components/usb_transport_espidf/src/espidf_usb_cdc_transport.cpp"
+    "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/cobs.cpp"
+    "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/crc32c.cpp"
+    "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/frame_accumulator.cpp"
+    "${SHAHBAZ_ROOT}/components/telemetry_protocol/src/wire_protocol.cpp"
+)
+target_include_directories(usb_transport_test PRIVATE
+    "${SHAHBAZ_ROOT}/components/usb_transport_espidf/test/fake_idf"
+    "${SHAHBAZ_ROOT}/components/usb_transport_espidf/include"
+    "${SHAHBAZ_ROOT}/components/interfaces/include"
+    "${SHAHBAZ_ROOT}/components/telemetry_protocol/include"
+)
+
 shahbaz_test(domain_measurement_test
     "${SHAHBAZ_ROOT}/components/domain/test/measurement_test.cpp"
 )

@@ -50,6 +50,10 @@ constexpr char kLogTag[] = "shahbaz";
 constexpr TickType_t kLoopDelayTicks = 1U;
 constexpr std::uint64_t kStatusLogPeriodUs = 5'000'000U;
 constexpr std::uint64_t kCriticalServiceMaxSilenceUs = 250'000U;
+// Collapse immediately-ready, state-only transitions without allowing more
+// than one bounded I2C/recovery transaction before USB, safety, and watchdog
+// service regain control.
+constexpr std::uint8_t kSensorStateAdvanceBudget = 4U;
 
 void log_issue(const shahbaz::interfaces::BoardValidationReport& report,
                const shahbaz::interfaces::BoardValidationIssue issue,
@@ -377,7 +381,11 @@ extern "C" void app_main(void) {
         }
 
         if (usb_ready && protocol_session_admitted) {
-            for (;;) {
+            // Process at most one RX queue per slice so continuous host traffic
+            // cannot defer sensor, TX, safety or watchdog servicing indefinitely.
+            for (std::size_t rx_chunk = 0U;
+                 rx_chunk < usb::EspIdfUsbCdcTransport::kRxServiceChunkBudget;
+                 ++rx_chunk) {
                 const auto before_read = usb_transport.connectionSnapshot();
                 if (before_read.epoch != handled_connection_epoch || !before_read.connected() ||
                     !usb_transport.sessionAdmitted(handled_connection_epoch)) {
@@ -406,7 +414,7 @@ extern "C" void app_main(void) {
         task_health.mark_alive(health::TaskId::UsbRx, now_us);
         task_health.mark_alive(health::TaskId::CommandDispatcher, now_us);
 
-        (void)sensor_scheduler.step();
+        (void)sensor_scheduler.service_ready(kSensorStateAdvanceBudget);
         task_health.mark_alive(health::TaskId::SensorScheduler, clock.now_us());
         task_health.mark_alive(health::TaskId::TelemetryEncoder, clock.now_us());
 

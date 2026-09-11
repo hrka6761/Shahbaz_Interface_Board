@@ -201,6 +201,14 @@ auto SafetySupervisor::handleActuatorCommand(const std::uint64_t now_us) noexcep
         transitionToSafe(SafetyState::Failsafe, SafeStopReason::LinkFailsafe);
         return SafetyCommandResult::RejectedLinkUnhealthy;
     }
+    if (controlCommandExpired(now_us)) {
+        // Command dispatch can run before the next periodic evaluate(). A late
+        // command must not refresh its own expired watchdog and resume outputs.
+        incrementSaturating(counters_.rejected_actuator_commands);
+        incrementSaturating(counters_.missed_control_commands);
+        transitionToSafe(SafetyState::Failsafe, SafeStopReason::ControlCommandTimeout);
+        return SafetyCommandResult::RejectedLinkUnhealthy;
+    }
     return SafetyCommandResult::AcceptedActuatorCommand;
 }
 

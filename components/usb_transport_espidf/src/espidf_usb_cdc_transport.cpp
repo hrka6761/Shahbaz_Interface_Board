@@ -167,7 +167,8 @@ void EspIdfUsbCdcTransport::cdcRx(const int interface_number, cdcacm_event_t*) {
 
 void EspIdfUsbCdcTransport::drainCdcRx() noexcept {
     if (rx_queue_ == nullptr) return;
-    for (;;) {
+    // A continuously replenished USB FIFO must not monopolize its RTOS task.
+    for (std::size_t chunk_index = 0U; chunk_index < kRxServiceChunkBudget; ++chunk_index) {
         const auto before = connectionSnapshot();
         RxChunk chunk{};
         chunk.epoch = before.epoch;
@@ -253,7 +254,19 @@ auto EspIdfUsbCdcTransport::send(const interfaces::ConstByteView frame,
     if (frame.size > protocol::kMaxDelimitedFrameLength) return interfaces::TransportStatus::Oversize;
     const auto connection = connectionSnapshot();
     if (!sessionAdmitted(connection.epoch)) return interfaces::TransportStatus::Disconnected;
-    if (expires_at_us <= clock_.now_us()) return interfaces::TransportStatus::Expired;
+    const auto now_us = clock_.now_us();
+    if (expires_at_us <= now_us) return interfaces::TransportStatus::Expired;
+
+    // Reclaim every expired, unsent item in one bounded queue scan. A partial
+    // frame must retain its slot until serviceTx emits the terminating delimiter.
+    for (auto& item : tx_) {
+        if (item.used && item.offset == 0U && !item.terminating_expired_frame &&
+            now_us >= item.expires_at_us) {
+            increment(tx_expired_);
+            if (active_tx_ == &item) active_tx_ = nullptr;
+            item.used = false;
+        }
+    }
 
     auto* free_item = static_cast<TxItem*>(nullptr);
     for (auto& item : tx_) {
@@ -274,6 +287,7 @@ auto EspIdfUsbCdcTransport::send(const interfaces::ConstByteView frame,
     free_item->order = insertion_order_++;
     free_item->epoch = connection.epoch;
     free_item->used = true;
+    free_item->terminating_expired_frame = false;
     increment(tx_frames_accepted_);
     return interfaces::TransportStatus::Accepted;
 }
@@ -310,11 +324,20 @@ void EspIdfUsbCdcTransport::serviceTx() noexcept {
     }
 
     const auto now = clock_.now_us();
-    if (now >= active_tx_->expires_at_us) {
+    if (!active_tx_->terminating_expired_frame && now >= active_tx_->expires_at_us) {
         increment(tx_expired_);
-        active_tx_->used = false;
-        active_tx_ = nullptr;
-        return;
+        if (active_tx_->offset == 0U) {
+            active_tx_->used = false;
+            active_tx_ = nullptr;
+            return;
+        }
+        // A prefix may already be on the host. Terminate its rejected COBS
+        // frame before sending another message, even if USB is backpressured.
+        // Keep the ordinary epoch/write guards for this one-byte operation.
+        active_tx_->bytes[0] = protocol::kFrameDelimiter;
+        active_tx_->size = 1U;
+        active_tx_->offset = 0U;
+        active_tx_->terminating_expired_frame = true;
     }
 
     // Claim a non-blocking writer guard. Connection callbacks never wait for

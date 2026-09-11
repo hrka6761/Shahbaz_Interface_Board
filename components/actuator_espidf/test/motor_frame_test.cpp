@@ -158,6 +158,30 @@ bool testPreconditionsRemainSafe() {
     return true;
 }
 
+bool testConfiguredPeriodsAccommodateEveryAcceptedPulse() {
+    for (const bool motor : {false, true}) {
+        auto invalid = validConfig();
+        if (motor) invalid.motor_frequency_hz = 500U; // 2100 us cannot fit into 2000 us.
+        else invalid.servo_frequency_hz = 400U; // 2500 us leaves no falling edge.
+        shahbaz::actuator::EspIdfPwmActuatorController controller{invalid};
+        g_ledc.clearRuntime();
+        CHECK(!controller.initialize());
+        CHECK(!controller.available());
+        CHECK(g_ledc.events.empty());
+    }
+    auto boundary = validConfig();
+    boundary.motor_frequency_hz = 476U;
+    boundary.servo_frequency_hz = 399U;
+    shahbaz::actuator::EspIdfPwmActuatorController controller{boundary};
+    CHECK(controller.initialize());
+    CHECK(controller.arm() == shahbaz::safety::ActuatorStatus::Ok);
+    CHECK(controller.writePulseUs(shahbaz::safety::ActuatorKind::Servo, 0U, 2500U) ==
+          shahbaz::safety::ActuatorStatus::Ok);
+    CHECK(controller.writeMotorFrame({{2100U, 2100U, 2100U, 2100U}}) ==
+          shahbaz::safety::ActuatorStatus::Ok);
+    return true;
+}
+
 }  // namespace
 
 extern "C" esp_err_t ledc_timer_config(const ledc_timer_config_t*) {
@@ -198,6 +222,7 @@ int main() {
                         testEveryInvalidValueForcesAllOutputsSafeBeforeAnyWrite() &&
                         testEveryStagingFailureForcesAllOutputsSafe() &&
                         testEveryUpdateFailureForcesAllOutputsSafe() &&
-                        testPreconditionsRemainSafe();
+                        testPreconditionsRemainSafe() &&
+                        testConfiguredPeriodsAccommodateEveryAcceptedPulse();
     return passed ? 0 : 1;
 }

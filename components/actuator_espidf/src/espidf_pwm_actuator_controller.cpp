@@ -34,7 +34,11 @@ auto EspIdfPwmActuatorController::pinConfigurationValid() const noexcept -> bool
         }
     }
     return config_.motor_frequency_hz >= 50U && config_.motor_frequency_hz <= 500U &&
-           config_.servo_frequency_hz >= 40U && config_.servo_frequency_hz <= 400U;
+           config_.servo_frequency_hz >= 40U && config_.servo_frequency_hz <= 400U &&
+           // Every accepted pulse must fit and leave a low interval. Silently
+           // clamping a 2100 us pulse to a 2000 us PWM period changes the command.
+           UINT64_C(2100) * config_.motor_frequency_hz < 1'000'000U &&
+           UINT64_C(2500) * config_.servo_frequency_hz < 1'000'000U;
 }
 
 auto EspIdfPwmActuatorController::configureChannels() noexcept -> bool {

@@ -15,5 +15,6 @@ int main() {
     CHECK(pulse_us_to_duty(1000U, 400U, 13U) == 3277U);
     CHECK(pulse_us_to_duty(2100U, 400U, 13U) == 6881U);
     CHECK(pulse_us_to_duty(2500U, 400U, 13U) == 8191U); // full-scale clamped safely
+    CHECK(pulse_us_to_duty(UINT16_MAX, UINT32_MAX, 30U) == (UINT32_C(1) << 30U) - 1U);
     return EXIT_SUCCESS;
 }
