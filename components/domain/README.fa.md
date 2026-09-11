@@ -6,6 +6,8 @@
 
 ## فایل‌های اصلی
 
+نوع <code dir="ltr">AcquisitionWindow</code> بازهٔ شروع تبدیل تا خواندن نتیجه را نگه می‌دارد و نقطهٔ میانی و نیم‌عرض گرد‌شده رو به بالا را بدون سرریز محاسبه می‌کند. فیلد 8 در <code dir="ltr">SensorSample</code> این خطای زمانی را به میکروثانیه و نوع <code dir="ltr">Unsigned32</code> حمل می‌کند؛ <code dir="ltr">UINT32_MAX</code> یعنی عدم قطعیت نامحدود یا غیرقابل نمایش. نمونه‌های <code dir="ltr">SHT30/MS5611</code> سه فیلد و <code dir="ltr">VL53L0X</code> چهار فیلد دارند؛ ظرفیت چهار فیلدی تغییر نکرده است. [قرارداد زمان](../sensor_scheduler/README.fa.md) را ببینید.
+
 - <code dir="ltr">include/shahbaz/domain/measurement.hpp</code>: اندازه‌گیری‌های نوع‌دار، مُهر زمانی، اعتبار، کیفیت و سلامت/وضعیت.
 - <code dir="ltr">test/measurement_test.cpp</code>: ساخت داده، مقادیر ذخیره‌شده و رفتار اعتبار را تست می‌کند.
 - <code dir="ltr">CMakeLists.txt</code>: <code dir="ltr">Component</code> <code dir="ltr">header-only</code> با <code dir="ltr">C++17</code>.

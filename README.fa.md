@@ -8,6 +8,8 @@
 
 ## مسیر عملیاتی
 
+مشاهده‌ها اکنون نقطهٔ میانی زمان اندازه‌گیری و عدم قطعیت زمانی هر نمونه را با فیلد 8 در <code dir="ltr">Protocol v2</code> حمل می‌کنند. <code dir="ltr">Android</code> باید آن را با خطای همگام‌سازی ساعت و عمر ارتباط برای تخمین و کنترل ترکیب کند؛ نسخه‌های هماهنگ نرم‌افزار و <code dir="ltr">Firmware</code> لازم‌اند. [قرارداد زمان، نرخ و عدم قطعیت](components/sensor_scheduler/README.fa.md) را ببینید. این تغییر، نویز مشاهده را برای تخمین سمت نرم‌افزار حفظ می‌کند و ادعای دقت پرواز اندازه‌گیری‌شده ندارد.
+
 ```text
 SHT30 + MS5611
       |
@@ -32,6 +34,8 @@ ESP32-S3 native USB -> Windows PC -> Windows HIL
 مسیر <code dir="ltr">Sensor</code> و <code dir="ltr">USB</code> به‌صورت پیش‌فرض فعال است. خروجی‌های فیزیکی چهار موتور و دو <code dir="ltr">Servo</code> پیاده‌سازی شده‌اند، اما با <code dir="ltr">CONFIG_SHAHBAZ_ACTUATORS_ENABLE=n</code> غیرفعال هستند. پروفایل پیش‌فرض <code dir="ltr">SHAHBAZ_ACTUATOR_BACKEND=null</code> همچنین اجزای خروجی فیزیکی و <code dir="ltr">LEDC</code> را از گراف و تصویر نهایی <code dir="ltr">Firmware</code> خارج می‌کند. فعال‌سازی آینده به پروفایل <code dir="ltr">espidf</code>، تنظیم هماهنگ <code dir="ltr">Kconfig</code> و مدرک مجاز همان برد نیاز دارد.
 
 در حالت مسلح، <code dir="ltr">Heartbeat Timeout</code> و <code dir="ltr">Control-command Timeout</code> مستقل هستند. اگر فرمان تازه موتور یا <code dir="ltr">Servo</code> بیش از <code dir="ltr">250 ms</code> نرسد، خروجی‌ها حتی با ادامهٔ <code dir="ltr">Heartbeat</code> به حالت امن می‌روند.
+
+هر فراخوانی دریافت <code dir="ltr">USB</code> و هر نوبت پردازش دریافت در برنامه حداکثر هشت قطعهٔ 256 بایتی را پردازش می‌کند تا سرویس‌های دیگر نیز فرصت اجرا داشته باشند. پیام ارسال‌نشدهٔ منقضی‌شده در یک پیمایش محدود صف آزاد می‌شود؛ اما پیام ناقص <code dir="ltr">COBS</code> تا ارسال جداکننده، حتی هنگام فشار برگشتی، جای خود را حفظ می‌کند تا پیام بعدی خراب نشود. فرمان دیررس پیش از تازه‌کردن <code dir="ltr">Watchdog</code> منقضی‌شده رد می‌شود. تنظیم اختیاری <code dir="ltr">PWM</code> باید بعد از بلندترین پالس مجاز فاصلهٔ پایین باقی بگذارد؛ حداکثر فرکانس موتور 476 هرتز و <code dir="ltr">Servo</code> برابر 399 هرتز است. محاسبهٔ نسبت وظیفه بدون سرریز عدد صحیح اشباع می‌شود.
 
 ## تنظیمات سخت‌افزاری پیش‌فرض
 
@@ -63,6 +67,8 @@ powershell -ExecutionPolicy Bypass -File tools\build_esp32.ps1 -ActuatorBackend 
 گزینهٔ <code dir="ltr">-ActuatorBackend espidf</code> فقط پس از تنظیم هماهنگ <code dir="ltr">Kconfig</code> و ثبت مدرک مجاز <code dir="ltr">Actuator</code> برای همان برد قابل استفاده است؛ وضعیت فعلی مخزن چنین تصویری را مجاز نمی‌کند.
 
 ## تست‌های مستقل از سخت‌افزار
+
+مجموعهٔ تست، کد واقعی انتقال <code dir="ltr">TinyUSB</code> را با رابط‌های شبیه‌سازی‌شدهٔ <code dir="ltr">ESP-IDF</code> می‌سازد و انقضای پیام ناقص، فشار برگشتی، آزادشدن ظرفیت صف منقضی، اولویت بدون درهم‌آمیختگی پیام، قطع اتصال هنگام نوشتن و محدودبودن کار زیر سیل دریافت را پوشش می‌دهد. تست‌های ایمنی و <code dir="ltr">PWM</code> مرز دقیق مهلت فرمان و دورهٔ نامعتبر پالس را نیز بررسی می‌کنند. نتایج اجرا و مرز اعتبارسنجی فیزیکی در [گزارش اعتبارسنجی](TEST_RESULTS.fa.md) ثبت شده‌اند.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\run_host_tests.ps1

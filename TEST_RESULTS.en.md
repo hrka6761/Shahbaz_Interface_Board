@@ -2,7 +2,7 @@
 
 [فارسی](TEST_RESULTS.fa.md) | **English**
 
-Date: 2026-08-13  
+Date: 2026-09-11<br>
 Target: `shahbaz_interface_board` / ESP32-S3 N16R8  
 Operational host: Android phone running the Shahbaz application  
 Development diagnostic host: Windows HIL  
@@ -11,14 +11,27 @@ Protocol: Shahbaz wire protocol v2 over native USB CDC-ACM
 ## Executed in this workspace
 
 - CMake configure/build for `test/host`: **PASS** with warnings treated as errors.
-- CTest: **13/13 PASS**, 0 failures.
+- CTest: **18/18 PASS**, 0 failures, in `build-host-vl53` (C++17, Release). This includes a production USB transport harness, acquisition-window/sensor scheduler tests, late-control watchdog boundaries, and overflow/period-safe PWM regressions. The WinLibs compiler's `bin` directory must be on `PATH` when launching its test executables.
 - `tools/windows_hil_test.py --self-test`: **PASS** for the Python diagnostic codec, CRC32C/COBS/framing, SHT30/MS5611 payload validation, session structures, and altitude/QNH math.
 - Kotlin Protocol v2 + operational session self-test: **PASS**, including physical-attachment state reset, TimeSync/session-token establishment, blocking session-bound traffic before TimeSync, telemetry decoding, and QNH altitude.
-- Android-framework integration sources were syntax-checked in this workspace against minimal API stubs: **PASS**. Real Android SDK/device compilation is still required in the Shahbaz application.
+- The standalone Kotlin check covers the framework-independent reference; it does not execute the real Android USB permission/device lifecycle.
 - `tools/validate_firmware_contract.py`: **PASS**. In addition to firmware/hardware constants and safety hardening, the validator now enforces the product-role contract: `shahbaz_interface_board` is the USB Device, Android + Shahbaz is the operational host/client, Windows is development/HIL only, and Android integration/acceptance artifacts must exist.
-- `tools/check_firmware_safety.py`: **PASS** over 53 production source files. `idf.py` is unavailable here, so no ESP-IDF target-build claim is made.
+- `tools/check_firmware_safety.py`: **PASS** over 61 production source files. Its optional tool-discovery warnings do not replace the separately executed host and target builds.
+- `tools/capture_boot_log.py --self-test` and `tools/verify_production_build.py --self-test`: **PASS**. The former validates synthetic transcripts, not a physical boot.
+- ESP-IDF **5.4.4** ESP32-S3 compile/link/image build: **PASS**, using `idf.py -B build-vl53-idf -D SHAHBAZ_ACTUATOR_BACKEND=null build`.
+- `tools/verify_production_build.py --build-dir build-vl53-idf --require-build --actuator-backend null`: **PASS** against the resulting ELF, linker map, configuration, component graph and **290,544-byte** application image. Physical actuator/LEDC components remain excluded; no hardware enablement is claimed.
 - `tools/validate_graphics_inputs.py`: **PASS with 4 warnings**, all limited to missing physical evidence photos.
-- `tools/check_bilingual_docs.py`: **PASS**; 78 Markdown files form 39 Persian/English pairs with valid local links and Persian direction/terminology policy.
+- `tools/check_bilingual_docs.py` and its discovery self-test: **PASS**; 82 Markdown files form 41 Persian/English pairs with valid local links and Persian direction/terminology policy.
+
+## Review corrections
+
+USB RX work is bounded to eight chunks per callback/application slice. Expired
+unsent TX slots are reclaimed promptly, and expired partial COBS frames are
+terminated before subsequent frames even under backpressure. Control timeout
+is checked during command acceptance, before a late command can renew it. PWM
+configuration rejects periods that cannot hold every accepted pulse, and duty
+arithmetic is overflow-safe. These changes have reproducing host regressions;
+they do not establish real-time deadlines or physical flight performance.
 
 ## Architecture correction implemented
 
@@ -47,9 +60,9 @@ The Android integration reference now contains:
 
 ## Physical tests still required
 
-This workspace does not provide the real ESP32-S3 board, sensors, Android phone/Shahbaz application runtime, Windows native-USB HIL hardware, or ESP-IDF `idf.py`. Therefore the following are **not marked as executed**:
+This review did not have the real ESP32-S3 board, sensors, Android phone/Shahbaz application runtime, or Windows native-USB HIL hardware. Therefore the following are **not marked as executed**:
 
-- ESP-IDF target compilation/link and flash/boot on the actual board;
+- flash/boot of the verified ESP-IDF image on the actual board;
 - electrical I2C operation at 400 kHz;
 - physical Windows board-level HIL;
 - **real Android USB permission/open/attach-detach lifecycle in the Shahbaz application**;

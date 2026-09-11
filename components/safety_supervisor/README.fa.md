@@ -14,3 +14,5 @@
 - <code dir="ltr">Kconfig</code>: تنظیمات <code dir="ltr">Scheduler</code>ی و ایمنی.
 
 در عملکرد عادی، حالت <code dir="ltr">Armed</code> فقط وقتی قابل دسترسی است که پیش‌شرط‌های آن معتبر باشند. قطع لینک، قدیمی شدن <code dir="ltr">Heartbeat</code>، توقف اضطراری، خرابی <code dir="ltr">Actuator</code>، خرابی <code dir="ltr">Liveness</code> سرویس بحرانی یا خطای ثبت/<code dir="ltr">Feed</code> کردن <code dir="ltr">Watchdog</code> سیستم را به حالت امن یا <code dir="ltr">Fault</code> قفل‌شده می‌برد. بررسی زمان فرستنده و <code dir="ltr">Session Token v2</code> پیش از تازه‌شدن <code dir="ltr">heartbeat/control freshness</code> انجام می‌شود تا فرمان قدیمی یا بازپخش‌شده نتواند لینک را سالم نشان دهد.
+
+متد <code dir="ltr">handleActuatorCommand()</code> پیش از پذیرش فرمان، مهلت مستقل فرمان خروجی را نیز بررسی می‌کند؛ حتی اگر پردازش فرمان پیش از اجرای دوره‌ای <code dir="ltr">evaluate()</code> رخ دهد. درست در مرز مهلت یا پس از آن، فرمان دیررس حالت امن <code dir="ltr">ControlCommandTimeout</code> را فعال می‌کند و نمی‌تواند مهلت منقضی‌شده را تمدید کند. تست‌ها لحظهٔ قبل، خود مرز و لحظهٔ بعد را با <code dir="ltr">Heartbeat</code> تازه پوشش می‌دهند.

@@ -8,6 +8,8 @@ Firmware and Android integration reference for **`shahbaz_interface_board`**, an
 
 ## Current implemented path
 
+Sensor observations now carry their acquisition midpoint and explicit per-sample timing uncertainty (v2 field 8). Android must combine this with clock synchronization and transport age before estimation/control; paired app/firmware versions are required. See the [sensor timing, cadence and uncertainty contract](components/sensor_scheduler/README.en.md). These changes preserve sensor noise for the Android estimator and do not claim measured flight precision.
+
 ```text
 SHT30 + MS5611
       |
@@ -45,6 +47,15 @@ validation before it initializes LEDC PWM or reports active channels in
 When enabled, arming requires a connected USB host, synchronized v2 session, a negotiated nonzero session token, and a fresh heartbeat. USB detach, heartbeat timeout, a 250 ms production timeout without a fresh actuator command while armed, emergency stop, an actuator hardware error, or a latched runtime-health fault immediately forces outputs to the safe stopped state.
 
 Protocol v2 flushes RX/TX/parser state at every physical USB session boundary, rejects old-session control traffic, checks actual sender timestamp freshness, and reports runtime DeviceInfo values. The main task is subscribed to the ESP-IDF Task Watchdog; watchdog timeout is configured to invoke the panic/reset path.
+
+USB receive callbacks and the application RX slice each process at most eight
+256-byte chunks before yielding to other work. Expired unsent TX entries are
+reclaimed in a bounded queue scan; an expired partial COBS frame retains its
+slot until a delimiter is sent, including under backpressure, so it cannot
+corrupt the next frame. A late actuator command is rejected before it can renew
+an expired control watchdog. Optional PWM configuration must leave a low
+interval after every accepted pulse (motor frequency at most 476 Hz, servo
+frequency at most 399 Hz); duty arithmetic saturates without integer overflow.
 
 ## Hardware defaults
 
@@ -93,6 +104,13 @@ a different port depending on the board.
 
 Hardware-independent C++ tests are strict-warning builds (`-Werror` on GCC/
 Clang and `/WX` on MSVC):
+
+The suite includes a host harness that compiles the production TinyUSB transport
+against fake ESP-IDF APIs. It covers partial-frame expiry/backpressure, expired
+queue capacity, priority ordering without frame interleaving, reconnect during
+a write, and bounded RX flood work. Safety and PWM tests also cover the exact
+control-timeout boundary and invalid pulse periods. See the dated
+[validation record](TEST_RESULTS.en.md) for executed checks and physical limits.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\run_host_tests.ps1

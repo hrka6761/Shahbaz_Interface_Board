@@ -38,13 +38,16 @@ The default per-sensor cadence is 100,000 us. A Protocol v2 `SetSensorRate` requ
 
 ## SensorSample contract
 
-VL53L0X samples use sensor ID `3` and three unsigned 32-bit fields:
+VL53L0X samples use sensor ID `3` and four unsigned 32-bit fields:
 
 | Field ID | Meaning |
 |---:|---|
 | `5` | Distance in millimetres |
 | `6` | Raw four-bit range status from `RESULT_RANGE_STATUS[6:3]` |
 | `7` | Shahbaz control-eligibility quality: `100` when status and distance are accepted, otherwise `0` |
+| `8` | Acquisition timing uncertainty in microseconds; `UINT32_MAX` means unknown/unrepresentable |
+
+The timestamp is the midpoint between conversion-start command and result-read completion. Field 8 is the upward-rounded half-width of this interval. Delayed publication does not change either value; delayed reading broadens the uncertainty. The requested interval is start-to-start, with actual cadence limited by sequential acquisitions and shared bus load. See [timing and scheduling](../sensor_scheduler/README.en.md).
 
 Field `7` is currently a conservative binary policy value, not a measured optical signal-strength percentage.
 

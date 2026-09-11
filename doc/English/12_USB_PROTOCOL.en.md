@@ -238,11 +238,16 @@ Field type `1` is signed 32-bit and field type `2` is unsigned 32-bit. Current f
 5 = distance, unsigned millimetres
 6 = raw VL53L0X range status, unsigned
 7 = VL53L0X Shahbaz control-eligibility quality, unsigned percent
+8 = acquisition timing uncertainty, unsigned microseconds (UINT32_MAX = unknown)
 ```
 
-SHT30 reports fields 1 and 2. MS5611 reports fields 3 and 4. In the operational product, the **Shahbaz Android application** owns QNH and calculates barometric altitude from pressure. Windows HIL may calculate the same value independently for diagnostics only.
+SHT30 reports fields 1, 2, and 8. MS5611 reports fields 3, 4, and 8. In the operational product, the **Shahbaz Android application** owns QNH and calculates barometric altitude from pressure. Windows HIL may calculate the same value independently for diagnostics only.
 
-Each VL53L0X sample reports fields 5, 6, and 7. Every physical sensor starts at 7-bit address `0x29`; firmware uses four independent XSHUT lines to assign runtime addresses `0x30..0x33` in the fixed instance order above. The feature is disabled by default until sensor and XSHUT evidence gates pass.
+Each VL53L0X sample reports fields 5, 6, 7, and 8. Every physical sensor starts at 7-bit address `0x29`; firmware uses four independent XSHUT lines to assign runtime addresses `0x30..0x33` in the fixed instance order above. The feature is disabled by default until sensor and XSHUT evidence gates pass.
+
+For these producers, `monotonic_timestamp_us` is the midpoint of the interval from immediately before the conversion-start command through successful result-read completion. Field 8 is the ceiling of half its width, in microseconds. Its maximum value is a sentinel for unknown/unrepresentable uncertainty. For MS5611 this describes D1 pressure; D2 temperature is cached compensation input with a separately enforced maximum age (400 ms by default), not a simultaneous observation. Neither subsequent publication nor USB arrival may replace the acquisition timestamp. The frame header timestamp remains the sender time used by clock synchronization.
+
+Field 8 extends existing generic v2 field tuples; framing, header, CRC, session and actuator rules are unchanged. Updated clients accept old field sets for diagnostics but assign unknown timing if field 8 is absent, or if it contains the sentinel; such data cannot establish precision-control freshness. The production Android client combines finite acquisition uncertainty with clock-mapping uncertainty and sample age. An older strict-schema Android version may reject extended telemetry, so app and firmware must be upgraded together. Requested sampling periods are not guarantees of delivery rate; see [scheduler timing](../../components/sensor_scheduler/README.en.md).
 
 The raw range status is `RESULT_RANGE_STATUS[6:3]`. Status `0` and `11` are accepted for control. Named failures are `1` sigma, `2` signal, `3` minimum range, `4` phase, and `5` hardware; other values are unknown. Firmware considers only 30 through 2000 mm inclusive control-eligible. Field 7 is currently `100` only when both status and distance pass that policy, otherwise `0`; it is not a measured optical signal-strength percentage.
 

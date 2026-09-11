@@ -14,3 +14,9 @@ Owns the fail-safe state machine for link, heartbeat, arming, faults, and actuat
 - `Kconfig`: safety timing/configuration options.
 
 In normal operation, arming is reachable only when its prerequisites are valid. Link loss, stale heartbeat, stale actuator commands while armed, emergency stop, actuator failure, critical-service liveness failure, or watchdog-registration/feed failure forces or latches a safe/fault state. The actuator-command watchdog is independent of heartbeat, so a healthy USB maintenance loop cannot keep old PWM active after the Android flight-control loop stops. Sender-time freshness and v2 session-token checks happen before normal heartbeat/control freshness is updated, so stale/replayed commands cannot make the link look healthy.
+
+`handleActuatorCommand()` also checks the independent control watchdog before
+acceptance, even when command dispatch precedes periodic `evaluate()`. At or
+after the timeout boundary, a late command forces `ControlCommandTimeout`
+failsafe and cannot renew the deadline. Tests cover immediately before, exactly
+at, and immediately after that boundary while heartbeat remains fresh.
