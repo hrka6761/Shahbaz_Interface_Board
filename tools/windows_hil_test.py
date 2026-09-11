@@ -456,9 +456,11 @@ def validate_sensor_sample(sample: dict) -> str:
         raise ProtocolError(f"sample reports sensor health faults: 0x{sample['health_flags']:08x}")
 
     fields = sample["fields"]
+    if 8 in fields and fields[8][0] != 2:
+        raise ProtocolError("acquisition timing uncertainty must be Unsigned32 microseconds")
     if sample["sensor_id"] == 1:  # SHT30
-        if set(fields) != {1, 2}:
-            raise ProtocolError(f"SHT30 fields are {sorted(fields)}, expected [1, 2]")
+        if set(fields) not in ({1, 2}, {1, 2, 8}):
+            raise ProtocolError(f"SHT30 fields are {sorted(fields)}, expected [1, 2] with optional 8")
         if fields[1][0] != 1 or fields[2][0] != 2:
             raise ProtocolError("SHT30 field types must be temp=Signed32, RH=Unsigned32")
         temp = fields[1][1]
@@ -469,8 +471,8 @@ def validate_sensor_sample(sample: dict) -> str:
             raise ProtocolError(f"SHT30 RH out of physical range: {rh} milli-percent")
         return f"SHT30 temp={temp/1000:.3f} C RH={rh/1000:.3f}%"
     if sample["sensor_id"] == 2:  # MS5611
-        if set(fields) != {3, 4}:
-            raise ProtocolError(f"MS5611 fields are {sorted(fields)}, expected [3, 4]")
+        if set(fields) not in ({3, 4}, {3, 4, 8}):
+            raise ProtocolError(f"MS5611 fields are {sorted(fields)}, expected [3, 4] with optional 8")
         if fields[3][0] != 1 or fields[4][0] != 1:
             raise ProtocolError("MS5611 field types must be pressure=Signed32, temp=Signed32")
         if (sample["validity"] & (1 << 2)) == 0:
@@ -483,8 +485,8 @@ def validate_sensor_sample(sample: dict) -> str:
             raise ProtocolError(f"MS5611 temperature out of plausible range: {temp} mdegC")
         return f"MS5611 pressure={pressure} Pa temp={temp/1000:.3f} C"
     if sample["sensor_id"] == 3:  # VL53L0X
-        if set(fields) != {5, 6, 7}:
-            raise ProtocolError(f"VL53L0X fields are {sorted(fields)}, expected [5, 6, 7]")
+        if set(fields) not in ({5, 6, 7}, {5, 6, 7, 8}):
+            raise ProtocolError(f"VL53L0X fields are {sorted(fields)}, expected [5, 6, 7] with optional 8")
         if any(fields[field_id][0] != 2 for field_id in (5, 6, 7)):
             raise ProtocolError("VL53L0X fields must all be Unsigned32")
         distance, raw_status, signal_quality = (
@@ -733,6 +735,23 @@ def self_test() -> None:
         description = validate_sensor_sample(parsed_range)
         assert role in description
         assert parsed_range["fields"][5][1] == 500 + instance_id
+
+    # The field extension leaves old recordings readable for diagnostics.
+    # Neither absence nor UINT32_MAX is evidence of a bounded acquisition time.
+    for legacy_sample in (parsed, parsed_ms, parsed_range):
+        extended = dict(legacy_sample)
+        extended["fields"] = dict(legacy_sample["fields"])
+        extended["fields"][8] = (2, 10_001)
+        validate_sensor_sample(extended)
+        extended["fields"][8] = (2, 0xFFFFFFFF)
+        validate_sensor_sample(extended)
+        extended["fields"][8] = (1, 10_001)
+        try:
+            validate_sensor_sample(extended)
+        except ProtocolError:
+            pass
+        else:
+            raise AssertionError("signed acquisition timing uncertainty was accepted")
 
     invalid_range = dict(parsed_range)
     invalid_range["fields"] = dict(parsed_range["fields"])

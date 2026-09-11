@@ -696,12 +696,17 @@ auto ArrayDriver::prepare_measurement(const std::uint64_t now_us,
             break;
         }
         case MeasurePhase::Start:
+            // Bracket the physical acquisition from before the start-command
+            // transfer through completion of the later result read. The
+            // interrupt polls only narrow readiness; they are not observations.
+            measurement_started_us_ = std::max(now_us, clock_.now_us());
             if (execute(kRegSysrangeStart, 0x01U)) {
+                const auto completed_us = std::max(now_us, clock_.now_us());
                 measure_phase_ = MeasurePhase::Prelude;
                 operation_timeout_at_us_ =
-                    saturating_add(now_us, config_.measurement_timeout_us);
+                    saturating_add(completed_us, config_.measurement_timeout_us);
                 state_ = ArrayState::WaitForMeasurementStart;
-                deadline_us_ = saturating_add(now_us,
+                deadline_us_ = saturating_add(completed_us,
                     config_.measurement_poll_interval_us);
             }
             break;
@@ -766,11 +771,11 @@ void ArrayDriver::publish_current(const std::uint64_t now_us,
     sample.sensor_id = domain::SensorId::Vl53l0x;
     sample.instance_id = static_cast<std::uint8_t>(current_);
     sample.sequence = sequence_[current_]++;
-    sample.monotonic_timestamp_us = now_us;
+    sample.monotonic_timestamp_us = pending_measurement_timestamp_us_;
     sample.validity = validity;
     sample.quality = quality;
     sample.health_flags = health_flags;
-    sample.field_count = 3U;
+    sample.field_count = 4U;
     sample.fields[0] = domain::make_unsigned_field(
         domain::FieldId::DistanceMillimeters, pending_reading_.distance_mm);
     sample.fields[1] = domain::make_unsigned_field(
@@ -778,6 +783,9 @@ void ArrayDriver::publish_current(const std::uint64_t now_us,
     sample.fields[2] = domain::make_unsigned_field(
         domain::FieldId::SignalQualityPercent,
         pending_reading_.signal_quality_percent);
+    sample.fields[3] = domain::make_unsigned_field(
+        domain::FieldId::AcquisitionTimeUncertaintyMicros,
+        pending_acquisition_uncertainty_us_);
     if (publisher_.publish(sample)) {
         result.sample_published = true;
         recovered_since_sample_[current_] = false;
@@ -787,8 +795,10 @@ void ArrayDriver::publish_current(const std::uint64_t now_us,
         saturating_increment(health_[current_].publication_drops);
         health_[current_].last_error = DriverError::PublisherBackpressure;
     }
-    next_sample_at_us_[current_] =
-        saturating_add(now_us, config_.per_sensor_sample_interval_us);
+    // Requested cadence is start-to-start. Publication/USB queue latency must
+    // not silently stretch it or change the observation timestamp.
+    next_sample_at_us_[current_] = saturating_add(
+        measurement_started_us_, config_.per_sensor_sample_interval_us);
     state_ = ArrayState::SelectWork;
     deadline_us_ = now_us;
     result.state_advanced = true;
@@ -962,19 +972,24 @@ auto ArrayDriver::step_at(const std::uint64_t now_us) noexcept -> StepResult {
             const auto status = read_block(config_.assigned_addresses[current_],
                                            kRegResultRangeStatus,
                                            range_bytes_.data(), range_bytes_.size());
+            const auto completed_us = std::max(now_us, clock_.now_us());
             if (status != interfaces::I2cStatus::Ok) {
-                fail_current(now_us, DriverError::I2cTransfer, status,
+                fail_current(completed_us, DriverError::I2cTransfer, status,
                              requires_bus_recovery(status));
             } else {
                 const auto parsed = parse_range_result(range_bytes_.data(),
                                                        range_bytes_.size());
                 if (!parsed.ok()) {
-                    fail_current(now_us, DriverError::InvalidResult,
+                    fail_current(completed_us, DriverError::InvalidResult,
                                  interfaces::I2cStatus::Ok, false);
                 } else {
                     pending_reading_ = parsed.value;
+                    const domain::AcquisitionWindow acquisition{
+                        measurement_started_us_, completed_us};
+                    pending_measurement_timestamp_us_ = acquisition.midpoint_us();
+                    pending_acquisition_uncertainty_us_ = acquisition.wire_uncertainty_us();
                     state_ = ArrayState::ClearInterrupt;
-                    deadline_us_ = now_us;
+                    deadline_us_ = completed_us;
                 }
             }
             result.state_advanced = true;
@@ -1000,12 +1015,13 @@ auto ArrayDriver::step_at(const std::uint64_t now_us) noexcept -> StepResult {
         case ArrayState::RecoverBus: {
             result.bus_operation = true;
             const auto status = bus_.recover(config_.bus_recovery_timeout_us);
+            const auto completed_us = std::max(now_us, clock_.now_us());
             auto& item = health_[current_];
             // Recovery may pulse SCL/SDA or recreate the controller even when
             // it ultimately reports failure. Publish the barrier on both
             // outcomes so the shared scheduler invalidates every I2C client
             // and permits no traffic until the electrical settle interval.
-            result.bus_settle_until_us = saturating_add(now_us, kRecoverySettleUs);
+            result.bus_settle_until_us = saturating_add(completed_us, kRecoverySettleUs);
             if (status == interfaces::I2cStatus::Ok) {
                 saturating_increment(item.recoveries);
                 for (std::size_t index = 0U; index < kSensorCount; ++index) {

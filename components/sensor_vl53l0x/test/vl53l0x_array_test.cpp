@@ -102,6 +102,8 @@ struct FakeBus final : shahbaz::interfaces::II2cBus {
 
     FakeHardware& hardware_;
     std::uint32_t operations{};
+    FakeClock* clock{};
+    std::uint64_t operation_duration_us{};
     std::uint32_t recoveries{};
     std::uint32_t fail_operation{};
     I2cStatus failure_status{I2cStatus::NotFound};
@@ -128,6 +130,7 @@ struct FakeBus final : shahbaz::interfaces::II2cBus {
     [[nodiscard]] auto transfer(const I2cTransaction& transaction) noexcept
         -> I2cStatus override {
         ++operations;
+        if (clock != nullptr) clock->now += operation_duration_us;
         if (!failure_consumed && fail_operation != 0U && operations == fail_operation) {
             failure_consumed = true;
             return failure_status;
@@ -187,6 +190,7 @@ struct FakeBus final : shahbaz::interfaces::II2cBus {
         -> I2cStatus override {
         ++operations;
         ++recoveries;
+        if (clock != nullptr) clock->now += operation_duration_us;
         return timeout_us == 0U ? I2cStatus::InvalidArgument : recovery_status;
     }
 };
@@ -369,8 +373,8 @@ int main() {
                 fixture.publisher.samples[instance].sensor_id ==
                     shahbaz::domain::SensorId::Vl53l0x,
                 "published sensor ID is the protocol allocation");
-            failures += expect(fixture.publisher.samples[instance].field_count == 3U,
-                               "distance/status/quality are published atomically");
+            failures += expect(fixture.publisher.samples[instance].field_count == 4U,
+                               "distance/status/quality/timing uncertainty are published atomically");
             failures += expect(fixture.publisher.samples[instance].health_flags == 0U,
                                "valid reading has no health fault bits");
         }
@@ -416,6 +420,63 @@ int main() {
                            "shared recovery resets every XSHUT line and volatile address");
         failures += expect(run_until_samples(fixture, driver, 8U, 40'000U),
                            "all four roles are readdressed after shared recovery");
+    }
+
+    {
+        Fixture fixture;
+        auto config = enabled_config();
+        config.per_sensor_sample_interval_us = 100'000U;
+        vl53::ArrayDriver driver(fixture.bus, fixture.clock, fixture.publisher,
+                                 fixture.shutdown, config);
+        failures += expect(run_until_samples(fixture, driver, 4U),
+                           "timing fixture reaches an initialized array");
+        fixture.bus.clock = &fixture.clock;
+        fixture.bus.operation_duration_us = 100U;
+        std::uint64_t started = 0U;
+        std::uint64_t completed = 0U;
+        std::uint64_t next_started = 0U;
+        bool read_delayed = false;
+        bool publication_delayed = false;
+        for (std::size_t step = 0U; step < 2'000U && next_started == 0U; ++step) {
+            if (driver.current_instance() == 0U &&
+                driver.state() == vl53::ArrayState::ReadMeasurement && !read_delayed) {
+                fixture.clock.now += 10'001U;
+                read_delayed = true;
+            }
+            if (driver.current_instance() == 0U &&
+                driver.state() == vl53::ArrayState::PublishMeasurement &&
+                !publication_delayed) {
+                fixture.clock.now += 20'000U;
+                publication_delayed = true;
+            }
+            const auto prior_state = driver.state();
+            const auto before = fixture.clock.now;
+            (void)driver.step();
+            if (driver.current_instance() == 0U &&
+                prior_state == vl53::ArrayState::PrepareMeasurement &&
+                driver.state() == vl53::ArrayState::WaitForMeasurementStart) {
+                if (started == 0U) started = before;
+                else next_started = before;
+            }
+            if (driver.current_instance() == 0U &&
+                prior_state == vl53::ArrayState::ReadMeasurement) completed = fixture.clock.now;
+            advance(fixture.clock, driver);
+        }
+        failures += expect(started > 0U && completed > started && next_started > completed,
+                           "timing fixture observes consecutive ground acquisitions");
+        failures += expect(fixture.publisher.samples.size() >= 5U &&
+                               fixture.publisher.samples[4U].monotonic_timestamp_us ==
+                                   started + (completed - started) / 2U,
+                           "range timestamp brackets conversion and result transfer, excluding publication delay");
+        failures += expect(fixture.publisher.samples.size() >= 5U &&
+                               fixture.publisher.samples[4U].fields[3].id ==
+                                   shahbaz::domain::FieldId::AcquisitionTimeUncertaintyMicros &&
+                               fixture.publisher.samples[4U].fields[3].value ==
+                                   static_cast<std::int64_t>((completed - started + 1U) / 2U),
+                           "range timing uncertainty grows with delayed read but excludes publication delay");
+        failures += expect(next_started - started >= config.per_sensor_sample_interval_us &&
+                               next_started - started < config.per_sensor_sample_interval_us + 2'000U,
+                           "publication delay is not added to the requested start-to-start cadence");
     }
 
     // Every I2C operation on a complete initialization/first-sample path is
@@ -490,10 +551,13 @@ int main() {
         (void)driver.step();  // wait-for-boot -> identity read
         (void)driver.step();  // injected timeout -> RecoverBus
         const auto recovery_at = fixture.clock.now;
+        fixture.bus.clock = &fixture.clock;
+        fixture.bus.operation_duration_us = 500U;
         const auto recovery = driver.step();
         failures += expect(
-            recovery.bus_settle_until_us > recovery_at,
-            "failed shared recovery still publishes an electrical settle barrier");
+            recovery.bus_settle_until_us > fixture.clock.now &&
+                fixture.clock.now == recovery_at + 500U,
+            "failed shared recovery starts its electrical settle barrier after transfer completion");
         failures += expect(
             driver.state() == vl53::ArrayState::HoldAllShutdown &&
                 !driver.ready_at(recovery_at),

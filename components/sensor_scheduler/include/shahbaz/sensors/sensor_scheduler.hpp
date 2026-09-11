@@ -1,6 +1,6 @@
 /**
  * @file sensor_scheduler.hpp
- * @brief Cooperative, deadline-driven SHT3x and MS5611 state machines.
+ * @brief Cooperative, deadline-driven SHT3x, MS5611, and VL53L0X state machines.
  *
  * Every call to a state-machine step performs at most one bounded I2C transfer
  * or one bounded recovery operation. No method sleeps, spins, or allocates.
@@ -135,6 +135,7 @@ class Sht3xStateMachine final {
     void restart_after_backoff(std::uint64_t now_us) noexcept;
     void publish_sample(const sht3x::Sample& value,
                         std::uint64_t now_us,
+                        std::uint32_t acquisition_uncertainty_us,
                         StepResult& result) noexcept;
     void invalidate_after_shared_recovery(
         std::uint64_t settle_until_us) noexcept;
@@ -149,6 +150,7 @@ class Sht3xStateMachine final {
     DriverHealth health_{};
     std::uint64_t deadline_us_{};
     std::uint64_t next_sample_due_us_{};
+    std::uint64_t measurement_started_us_{};
     std::uint32_t retry_backoff_us_{};
     std::uint32_t sequence_{};
     sht3x::Status last_status_{};
@@ -227,6 +229,7 @@ class Ms5611StateMachine final {
     void reset_initialization_state() noexcept;
     void publish_sample(const ms5611::CompensatedSample& value,
                         std::uint64_t now_us,
+                        std::uint32_t acquisition_uncertainty_us,
                         StepResult& result) noexcept;
     void invalidate_after_shared_recovery(
         std::uint64_t settle_until_us) noexcept;
@@ -247,6 +250,8 @@ class Ms5611StateMachine final {
     std::uint64_t next_temperature_due_us_{};
     std::uint64_t last_pressure_timestamp_us_{};
     std::uint64_t last_temperature_timestamp_us_{};
+    std::uint64_t pressure_conversion_started_us_{};
+    std::uint64_t temperature_conversion_started_us_{};
     std::uint32_t raw_temperature_d2_{};
     std::uint32_t retry_backoff_us_{};
     std::uint32_t sequence_{};
@@ -269,7 +274,15 @@ struct SchedulerStepResult final {
     StepResult step{};
 };
 
-/** Fair cooperative arbiter for the two machines sharing one I2C bus. */
+/** Aggregate outcome of one bounded scheduler service slice. */
+struct SchedulerServiceResult final {
+    std::uint8_t state_advances{};
+    bool bus_operation{};
+    bool sample_published{};
+    bool budget_exhausted{};
+};
+
+/** Fair cooperative arbiter for the sensor machines sharing one I2C bus. */
 class SharedSensorScheduler final {
   public:
     SharedSensorScheduler(interfaces::II2cBus& bus,
@@ -282,6 +295,13 @@ class SharedSensorScheduler final {
 
     /** Advances at most one sensor and therefore at most one bus operation. */
     [[nodiscard]] auto step() noexcept -> SchedulerStepResult;
+    /**
+     * Drains immediately-ready state-only transitions under a fixed budget.
+     * The slice stops after its first I2C/recovery operation, so communication,
+     * safety supervision, and the watchdog regain control promptly.
+     */
+    [[nodiscard]] auto service_ready(std::uint8_t maximum_state_advances) noexcept
+        -> SchedulerServiceResult;
     [[nodiscard]] auto next_deadline_us() const noexcept -> std::uint64_t;
 
     [[nodiscard]] auto sht3x() const noexcept -> const Sht3xStateMachine&;

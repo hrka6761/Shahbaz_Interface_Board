@@ -1086,10 +1086,20 @@ private fun SensorSample.requireUsableCommon() {
     }
 }
 
+/** Null (legacy producer) and UInt.MAX_VALUE both mean unknown timing for control. */
+fun SensorSample.acquisitionTimeUncertaintyMicros(): UInt? = fields[8]?.unsignedValue()
+
+private fun SensorSample.requireMeasurementFields(required: Set<Int>) {
+    if (fields.keys != required && fields.keys != required + 8) {
+        throw ProtocolException("sensor field set must be $required with optional timing field 8")
+    }
+    acquisitionTimeUncertaintyMicros() // Reject malformed type even in diagnostics.
+}
+
 fun SensorSample.asSht30Reading(): Sht30Reading {
     requireUsableCommon()
     if (sensorId != SensorId.SHT30) throw ProtocolException("sample is not SHT30")
-    if (fields.keys != setOf(1, 2)) throw ProtocolException("SHT30 field set must be {1,2}")
+    requireMeasurementFields(setOf(1, 2))
     val temperature = fields.getValue(1).signedValue()
     val humidity = fields.getValue(2).unsignedValue()
     if (temperature !in -40_000..125_000) {
@@ -1105,7 +1115,7 @@ fun SensorSample.asMs5611Reading(): Ms5611Reading {
     if ((validityFlags and SensorValidity.CALIBRATION_VALID) == 0u) {
         throw ProtocolException("MS5611 calibration is not valid")
     }
-    if (fields.keys != setOf(3, 4)) throw ProtocolException("MS5611 field set must be {3,4}")
+    requireMeasurementFields(setOf(3, 4))
     val pressure = fields.getValue(3).signedValue()
     val temperature = fields.getValue(4).signedValue()
     if (pressure !in 1_000..120_000) throw ProtocolException("MS5611 pressure is outside supported range")
@@ -1137,9 +1147,7 @@ fun SensorSample.asVl53l0xReading(): Vl53l0xReading {
         throw ProtocolException("VL53L0X quality flags are invalid")
     }
     if (healthFlags != 0u) throw ProtocolException("VL53L0X reports a health fault")
-    if (fields.keys != setOf(5, 6, 7)) {
-        throw ProtocolException("VL53L0X field set must be {5,6,7}")
-    }
+    requireMeasurementFields(setOf(5, 6, 7))
     val distance = fields.getValue(5).unsignedValue()
     val status = fields.getValue(6).unsignedValue()
     val quality = fields.getValue(7).unsignedValue()

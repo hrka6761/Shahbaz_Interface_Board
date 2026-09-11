@@ -357,12 +357,12 @@ void test_nominal_shared_schedule_and_order() {
     CHECK(sht_sample != nullptr);
     CHECK(ms_sample != nullptr);
     if (sht_sample != nullptr) {
-        CHECK(sht_sample->field_count == 2U);
+        CHECK(sht_sample->field_count == 3U);
         CHECK(sht_sample->fields[0].value == 85'523);
         CHECK(sht_sample->fields[1].value == 0);
     }
     if (ms_sample != nullptr) {
-        CHECK(ms_sample->field_count == 2U);
+        CHECK(ms_sample->field_count == 3U);
         CHECK(ms_sample->fields[0].value == 100'009);
         CHECK(ms_sample->fields[1].value == 20'070);
     }
@@ -541,6 +541,122 @@ void test_explicit_step_time_guards_against_regressed_clock() {
     CHECK(clock.now_us() == 0U);
     CHECK(machine.state() == Sht3xState::WaitAfterReset);
     CHECK(machine.next_deadline_us() == 4'000U);
+}
+
+void test_acquisition_timestamps_include_conversion_and_delayed_read() {
+    FakeClock clock;
+    FakeBus bus(clock);
+    FakePublisher publisher;
+    bus.operation_duration_us = 750U;
+    Sht3xStateMachine sht(bus, clock, publisher);
+    for (std::size_t step = 0U; step < 64U &&
+         sht.state() != Sht3xState::ReadMeasurement; ++step) {
+        if (!sht.ready_at(clock.now_us())) clock.set(sht.next_deadline_us());
+        (void)sht.step();
+    }
+    CHECK(sht.state() == Sht3xState::ReadMeasurement);
+    const auto sht_started = bus.operation_at(bus.operation_count - 1U).started_at_us;
+    CHECK(bus.operation_at(bus.operation_count - 1U).command == 0x2400U);
+    clock.advance(10'001U);  // A delayed scheduler service broadens the window.
+    CHECK(sht.step().sample_published);
+    CHECK(publisher.sample_count == 1U);
+    CHECK(publisher.samples[0].monotonic_timestamp_us ==
+          sht_started + (clock.now_us() - sht_started) / 2U);
+    CHECK(publisher.samples[0].monotonic_timestamp_us < clock.now_us());
+    CHECK(publisher.samples[0].fields[2].id ==
+          shahbaz::domain::FieldId::AcquisitionTimeUncertaintyMicros);
+    CHECK(publisher.samples[0].fields[2].type == shahbaz::domain::FieldType::Unsigned32);
+    CHECK(publisher.samples[0].fields[2].value == static_cast<std::int64_t>(
+          (clock.now_us() - sht_started + 1U) / 2U));
+
+    Ms5611StateMachine ms(bus, clock, publisher);
+    std::uint64_t d2_started = 0U;
+    std::uint64_t d2_completed = 0U;
+    std::uint64_t d1_started = 0U;
+    for (std::size_t step = 0U; step < 64U &&
+         ms.state() != Ms5611State::ReadPressureD1; ++step) {
+        if (!ms.ready_at(clock.now_us())) clock.set(ms.next_deadline_us());
+        const auto prior_state = ms.state();
+        const auto started = clock.now_us();
+        (void)ms.step();
+        if (prior_state == Ms5611State::StartTemperatureD2) d2_started = started;
+        if (prior_state == Ms5611State::ReadTemperatureD2) d2_completed = clock.now_us();
+        if (prior_state == Ms5611State::StartPressureD1) d1_started = started;
+    }
+    CHECK(ms.state() == Ms5611State::ReadPressureD1);
+    CHECK(d2_completed > d2_started && d1_started >= d2_completed);
+    CHECK(ms.last_temperature_timestamp_us() ==
+          d2_started + (d2_completed - d2_started) / 2U);
+    clock.advance(10'001U);
+    CHECK(ms.step().sample_published);
+    CHECK(publisher.sample_count == 2U);
+    CHECK(publisher.samples[1].monotonic_timestamp_us ==
+          d1_started + (clock.now_us() - d1_started) / 2U);
+    CHECK(ms.last_pressure_timestamp_us() == publisher.samples[1].monotonic_timestamp_us);
+    CHECK(publisher.samples[1].fields[2].id ==
+          shahbaz::domain::FieldId::AcquisitionTimeUncertaintyMicros);
+    CHECK(publisher.samples[1].fields[2].value == static_cast<std::int64_t>(
+          (clock.now_us() - d1_started + 1U) / 2U));
+}
+
+void test_service_ready_collapses_state_transitions_with_one_bus_operation() {
+    FakeClock clock;
+    FakeBus bus(clock);
+    FakePublisher publisher;
+    SharedSensorScheduler scheduler(bus, clock, publisher);
+    clock.set(2'000U);
+    CHECK(scheduler.service_ready(0U).state_advances == 0U);
+    CHECK(bus.operation_count == 0U);
+    const auto state_only = scheduler.service_ready(1U);
+    CHECK(state_only.state_advances == 1U && state_only.budget_exhausted);
+    CHECK(!state_only.bus_operation && bus.operation_count == 0U);
+    const auto first_bus = scheduler.service_ready(4U);
+    CHECK(first_bus.bus_operation && bus.operation_count == 1U);
+    CHECK(!first_bus.budget_exhausted);
+
+    bool collapsed = false;
+    bool published = false;
+    for (std::size_t slice = 0U; slice < 800U; ++slice) {
+        const auto before = bus.operation_count;
+        const auto samples_before = publisher.sample_count;
+        const auto result = scheduler.service_ready(4U);
+        const auto operations = bus.operation_count - before;
+        CHECK(operations <= 1U);
+        CHECK(result.bus_operation == (operations == 1U));
+        CHECK(result.state_advances <= 4U);
+        CHECK(result.sample_published == (publisher.sample_count > samples_before));
+        collapsed = collapsed || result.state_advances > 1U;
+        published = published || result.sample_published;
+        clock.advance(1'000U);
+    }
+    CHECK(collapsed && published);
+    CHECK(publisher.count_for(SensorId::Sht3x) >= 2U);
+    CHECK(publisher.count_for(SensorId::Ms5611) >= 10U);
+}
+
+void test_temperature_age_uses_oldest_acquisition_bound() {
+    FakeClock clock;
+    FakeBus bus(clock);
+    FakePublisher publisher;
+    Ms5611Config config{};
+    Ms5611StateMachine machine(bus, clock, publisher, config);
+    std::uint64_t temperature_started = 0U;
+    for (std::size_t step = 0U; step < 64U &&
+         machine.state() != Ms5611State::ReadPressureD1; ++step) {
+        if (!machine.ready_at(clock.now_us())) clock.set(machine.next_deadline_us());
+        if (machine.state() == Ms5611State::StartTemperatureD2) {
+            temperature_started = clock.now_us();
+        }
+        (void)machine.step();
+    }
+    CHECK(machine.state() == Ms5611State::ReadPressureD1);
+    clock.set(temperature_started + config.maximum_temperature_age_us + 1U);
+    // Midpoint-only age would still accept this sample by several milliseconds.
+    CHECK(clock.now_us() - machine.last_temperature_timestamp_us() <
+          config.maximum_temperature_age_us);
+    CHECK(!machine.step().sample_published);
+    CHECK(machine.health().last_error == DriverError::StaleTemperature);
+    CHECK(publisher.sample_count == 0U);
 }
 
 void test_pressure_cadence_is_phase_anchored() {
@@ -763,6 +879,8 @@ void test_recovery_settle_is_a_shared_bus_barrier() {
               shahbaz::sensors::scheduler::ScheduledSensor::None);
         CHECK(bus.operation_count == operations_after_recovery);
         CHECK(scheduler.next_deadline_us() == barrier);
+        CHECK(scheduler.service_ready(255U).state_advances == 0U);
+        CHECK(bus.operation_count == operations_after_recovery);
         clock.set(barrier - 1U);
         (void)scheduler.step();
         CHECK(bus.operation_count == operations_after_recovery);
@@ -847,6 +965,9 @@ int main() {
     test_ms_adc_deadline_is_enforced();
     test_deadline_starts_after_bounded_transfer_completion();
     test_explicit_step_time_guards_against_regressed_clock();
+    test_acquisition_timestamps_include_conversion_and_delayed_read();
+    test_service_ready_collapses_state_transitions_with_one_bus_operation();
+    test_temperature_age_uses_oldest_acquisition_bound();
     test_pressure_cadence_is_phase_anchored();
     test_invalid_identity_configuration_fails_closed();
     test_sht_failure_does_not_stop_ms5611();

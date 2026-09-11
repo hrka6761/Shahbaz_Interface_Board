@@ -11,6 +11,20 @@
 int main() {
     using namespace shahbaz::domain;
 
+    constexpr auto largest = std::numeric_limits<std::uint64_t>::max();
+    static_assert(AcquisitionWindow{100U, 105U}.midpoint_us() == 102U);
+    static_assert(AcquisitionWindow{100U, 105U}.maximum_error_us() == 3U);
+    static_assert(AcquisitionWindow{largest - 10U, largest}.midpoint_us() ==
+                  largest - 5U);
+    static_assert(AcquisitionWindow{0U, largest}.maximum_error_us() ==
+                  largest / 2U + 1U);
+    static_assert(AcquisitionWindow{42U, 42U}.maximum_error_us() == 0U);
+    static_assert(!AcquisitionWindow{43U, 42U}.ordered());
+    static_assert(AcquisitionWindow{43U, 42U}.maximum_error_us() == largest);
+    static_assert(AcquisitionWindow{100U, 105U}.wire_uncertainty_us() == 3U);
+    static_assert(AcquisitionWindow{43U, 42U}.wire_uncertainty_us() == UINT32_MAX);
+    static_assert(AcquisitionWindow{0U, largest}.wire_uncertainty_us() == UINT32_MAX);
+
     SensorSample sample{};
     sample.sensor_id = SensorId::Sht3x;
     sample.instance_id = 0U;

@@ -186,6 +186,10 @@ class ArrayDriver final {
     std::array<std::uint8_t, 6U> reference_spad_map_{};
     std::array<std::uint8_t, 12U> range_bytes_{};
     RangeReading pending_reading_{};
+    /** Bounds for the in-flight measurement; the wire carries their midpoint. */
+    std::uint64_t measurement_started_us_{};
+    std::uint64_t pending_measurement_timestamp_us_{};
+    std::uint32_t pending_acquisition_uncertainty_us_{};
     std::uint64_t deadline_us_{};
     std::uint64_t operation_timeout_at_us_{};
     std::size_t current_{};

@@ -170,9 +170,10 @@ bool testSenderAndPublisher() {
     sample.sensor_id=domain::SensorId::Sht3x; sample.instance_id=0U; sample.sequence=77U;
     sample.monotonic_timestamp_us=999U;
     sample.validity=domain::ValidityFlag::TransportValid | domain::ValidityFlag::CrcValid;
-    sample.quality=domain::QualityFlag::Fresh; sample.health_flags=0x12U; sample.field_count=2U;
+    sample.quality=domain::QualityFlag::Fresh; sample.health_flags=0x12U; sample.field_count=3U;
     sample.fields[0]=domain::make_signed_field(domain::FieldId::AmbientTemperatureMilliCelsius, 23456);
     sample.fields[1]=domain::make_unsigned_field(domain::FieldId::RelativeHumidityMilliPercent, 50123U);
+    sample.fields[2]=domain::make_unsigned_field(domain::FieldId::AcquisitionTimeUncertaintyMicros, 0x89ABCDEFU);
     CHECK(publisher.publish(sample)); // disabled is deliberate no-op success
     CHECK(transport.sent.size() == 1U);
     publisher.setEnabled(true);
@@ -180,8 +181,11 @@ bool testSenderAndPublisher() {
     CHECK(transport.sent.size() == 2U);
     decoded=decodeSent(transport.sent.back());
     CHECK(decoded.header.message_type == protocol::MessageType::SensorSample);
-    CHECK(decoded.payload_size == 39U);
-    CHECK(decoded.payload[0] == 1U && decoded.payload[1] == 0U && decoded.payload[26] == 2U);
+    CHECK(decoded.payload_size == 45U);
+    CHECK(decoded.payload[0] == 1U && decoded.payload[1] == 0U && decoded.payload[26] == 3U);
+    CHECK(decoded.payload[39] == 8U && decoded.payload[40] == 2U);
+    CHECK(decoded.payload[41] == 0xEFU && decoded.payload[42] == 0xCDU &&
+          decoded.payload[43] == 0xABU && decoded.payload[44] == 0x89U);
 
     sample.fields[0] = {domain::FieldId::AmbientTemperatureMilliCelsius, domain::FieldType::Signed32,
                         static_cast<std::int64_t>(INT32_MAX) + 1};

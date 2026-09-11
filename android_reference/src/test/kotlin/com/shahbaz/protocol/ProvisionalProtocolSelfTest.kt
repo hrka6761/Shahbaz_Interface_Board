@@ -274,6 +274,34 @@ object ProvisionalProtocolSelfTest {
             check(rangeRejected) { "invalid VL53L0X sample was accepted" }
         }
 
+        for (legacy in listOf(shtPayload, msPayload,
+            vl53l0xPayload(instance = 0, sequence = 1u, deviceTimestampUs = 1uL))) {
+            check(decodeSensorSample(decodedSensorFrame(legacy))!!
+                .acquisitionTimeUncertaintyMicros() == null)
+            val headerAndFields = legacy.copyOf().also { it[26] = (it[26] + 1).toByte() }
+            fun validateReading(sample: SensorSample) {
+                when (sample.sensorId) {
+                    SensorId.SHT30 -> sample.asSht30Reading()
+                    SensorId.MS5611 -> sample.asMs5611Reading()
+                    SensorId.VL53L0X -> sample.asVl53l0xReading()
+                }
+            }
+            for (uncertainty in listOf(10_001u, UInt.MAX_VALUE)) {
+                val sample = decodeSensorSample(decodedSensorFrame(
+                    headerAndFields + fieldUnsigned(8, uncertainty)))!!
+                check(sample.acquisitionTimeUncertaintyMicros() == uncertainty)
+                validateReading(sample)
+            }
+            var timingRejected = false
+            try {
+                validateReading(decodeSensorSample(decodedSensorFrame(
+                    headerAndFields + fieldSigned(8, 10_001)))!!)
+            } catch (_: ProtocolException) {
+                timingRejected = true
+            }
+            check(timingRejected) { "signed acquisition timing uncertainty was accepted" }
+        }
+
         var rejected = false
         try {
             val duplicate =

@@ -176,7 +176,11 @@ void saturating_increment(std::uint32_t& value) noexcept {
     const auto minimum_temperature_age = static_cast<std::uint32_t>(std::min(
         static_cast<std::uint64_t>(config.temperature_interval_us) +
             static_cast<std::uint64_t>(pressure_timing.maximum_duration_us) +
-            config.conversion_margin_us,
+            config.conversion_margin_us +
+            // Compensation age is measured from the oldest possible D2
+            // acquisition time. Include D2 conversion itself as well as the
+            // following pressure conversion when normalizing minimum age.
+            minimum_temperature_interval,
         static_cast<std::uint64_t>(std::numeric_limits<std::uint32_t>::max())));
     config.maximum_temperature_age_us =
         std::max(config.maximum_temperature_age_us, minimum_temperature_age);
@@ -314,6 +318,7 @@ void Sht3xStateMachine::invalidate_after_shared_recovery(
 
 void Sht3xStateMachine::publish_sample(const sht3x::Sample& value,
                                        const std::uint64_t now_us,
+                                       const std::uint32_t acquisition_uncertainty_us,
                                        StepResult& result) noexcept {
     const bool plausible = !value.temperature_outside_specified_range &&
                            value.relative_humidity_milli_percent <= 100'000U;
@@ -333,13 +338,15 @@ void Sht3xStateMachine::publish_sample(const sht3x::Sample& value,
     sample.health_flags = value.temperature_outside_specified_range
                               ? kShtTemperatureOutOfRange
                               : 0U;
-    sample.field_count = 2U;
+    sample.field_count = 3U;
     sample.fields[0] = domain::make_signed_field(
         domain::FieldId::AmbientTemperatureMilliCelsius,
         value.ambient_temperature_milli_celsius);
     sample.fields[1] = domain::make_unsigned_field(
         domain::FieldId::RelativeHumidityMilliPercent,
         value.relative_humidity_milli_percent);
+    sample.fields[2] = domain::make_unsigned_field(
+        domain::FieldId::AcquisitionTimeUncertaintyMicros, acquisition_uncertainty_us);
 
     if (publisher_.publish(sample)) {
         result.sample_published = true;
@@ -544,6 +551,7 @@ auto Sht3xStateMachine::step_at(const std::uint64_t now_us) noexcept
             const auto profile = sht3x::measurement_profile(
                 initialization_complete_ ? config_.repeatability
                                          : sht3x::Repeatability::High);
+            const auto started_us = std::max(now_us, clock_.now_us());
             const auto status = write_command(profile.command);
             const auto completed_us = std::max(now_us, clock_.now_us());
             if (status != interfaces::I2cStatus::Ok) {
@@ -551,6 +559,10 @@ auto Sht3xStateMachine::step_at(const std::uint64_t now_us) noexcept
                 break;
             }
             health_.last_i2c_status = status;
+            // The command transfer may start the conversion before the bus call
+            // returns, so retain its pre-transfer time as the conservative lower
+            // bound rather than later regenerating a timestamp at publication.
+            measurement_started_us_ = started_us;
             next_sample_due_us_ = advance_periodic_deadline(
                 next_sample_due_us_, completed_us,
                 config_.sample_interval_us);
@@ -595,7 +607,10 @@ auto Sht3xStateMachine::step_at(const std::uint64_t now_us) noexcept
                      repeated_crc);
                 break;
             }
-            publish_sample(parsed.value, completed_us, result);
+            const domain::AcquisitionWindow acquisition{
+                measurement_started_us_, completed_us};
+            publish_sample(parsed.value, acquisition.midpoint_us(),
+                           acquisition.wire_uncertainty_us(), result);
             state_ = Sht3xState::Idle;
             deadline_us_ = next_sample_due_us_;
             break;
@@ -718,6 +733,8 @@ void Ms5611StateMachine::reset_initialization_state() noexcept {
     raw_temperature_d2_ = 0U;
     last_pressure_timestamp_us_ = 0U;
     last_temperature_timestamp_us_ = 0U;
+    pressure_conversion_started_us_ = 0U;
+    temperature_conversion_started_us_ = 0U;
 }
 
 void Ms5611StateMachine::fail(const std::uint64_t now_us,
@@ -780,6 +797,7 @@ void Ms5611StateMachine::invalidate_after_shared_recovery(
 
 void Ms5611StateMachine::publish_sample(
     const ms5611::CompensatedSample& value, const std::uint64_t now_us,
+    const std::uint32_t acquisition_uncertainty_us,
     StepResult& result) noexcept {
     const bool pressure_plausible =
         value.pressure_pascal >= 1'000 && value.pressure_pascal <= 120'000;
@@ -808,12 +826,14 @@ void Ms5611StateMachine::publish_sample(
     sample.quality = fresh_quality(recovered_since_sample_,
                                    health_.sampling_rate_clamped);
     sample.health_flags = health_flags;
-    sample.field_count = 2U;
+    sample.field_count = 3U;
     sample.fields[0] = domain::make_signed_field(
         domain::FieldId::CompensatedPressurePascal, value.pressure_pascal);
     sample.fields[1] = domain::make_signed_field(
         domain::FieldId::InternalTemperatureMilliCelsius,
         value.internal_temperature_milli_celsius);
+    sample.fields[2] = domain::make_unsigned_field(
+        domain::FieldId::AcquisitionTimeUncertaintyMicros, acquisition_uncertainty_us);
 
     if (publisher_.publish(sample)) {
         result.sample_published = true;
@@ -847,8 +867,8 @@ auto Ms5611StateMachine::ready_at(const std::uint64_t now_us) const noexcept
                 return true;
             }
             const auto temperature_age =
-                now_us >= last_temperature_timestamp_us_
-                    ? now_us - last_temperature_timestamp_us_
+                now_us >= temperature_conversion_started_us_
+                    ? now_us - temperature_conversion_started_us_
                     : 0U;
             return now_us >= next_temperature_due_us_ ||
                    temperature_age > config_.maximum_temperature_age_us ||
@@ -878,7 +898,7 @@ auto Ms5611StateMachine::next_deadline_us() const noexcept -> std::uint64_t {
         return deadline_us_;
     }
     const auto maximum_age_deadline = saturating_add(
-        last_temperature_timestamp_us_, config_.maximum_temperature_age_us);
+        temperature_conversion_started_us_, config_.maximum_temperature_age_us);
     return std::min(next_pressure_due_us_,
                     std::min(next_temperature_due_us_, maximum_age_deadline));
 }
@@ -1009,8 +1029,8 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
 
         case Ms5611State::Idle: {
             const auto temperature_age =
-                now_us >= last_temperature_timestamp_us_
-                    ? now_us - last_temperature_timestamp_us_
+                now_us >= temperature_conversion_started_us_
+                    ? now_us - temperature_conversion_started_us_
                     : 0U;
             if (!temperature_valid_ ||
                 temperature_age > config_.maximum_temperature_age_us) {
@@ -1035,6 +1055,7 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
             const auto profile = ms5611::conversion_profile(
                 ms5611::ConversionKind::TemperatureD2,
                 config_.temperature_osr);
+            const auto started_us = std::max(now_us, clock_.now_us());
             const auto status = write_command(profile.command);
             const auto completed_us = std::max(now_us, clock_.now_us());
             if (status != interfaces::I2cStatus::Ok) {
@@ -1042,6 +1063,7 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
                 break;
             }
             health_.last_i2c_status = status;
+            temperature_conversion_started_us_ = started_us;
             next_temperature_due_us_ = advance_periodic_deadline(
                 next_temperature_due_us_, completed_us,
                 config_.temperature_interval_us);
@@ -1076,7 +1098,8 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
             }
             raw_temperature_d2_ = decoded.value;
             temperature_valid_ = true;
-            last_temperature_timestamp_us_ = completed_us;
+            last_temperature_timestamp_us_ = domain::AcquisitionWindow{
+                temperature_conversion_started_us_, completed_us}.midpoint_us();
             health_.last_i2c_status = status;
             state_ = Ms5611State::Idle;
             deadline_us_ = completed_us;
@@ -1087,6 +1110,7 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
             result.bus_operation = true;
             const auto profile = ms5611::conversion_profile(
                 ms5611::ConversionKind::PressureD1, config_.pressure_osr);
+            const auto started_us = std::max(now_us, clock_.now_us());
             const auto status = write_command(profile.command);
             const auto completed_us = std::max(now_us, clock_.now_us());
             if (status != interfaces::I2cStatus::Ok) {
@@ -1094,6 +1118,7 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
                 break;
             }
             health_.last_i2c_status = status;
+            pressure_conversion_started_us_ = started_us;
             next_pressure_due_us_ = advance_periodic_deadline(
                 next_pressure_due_us_, completed_us,
                 config_.pressure_interval_us);
@@ -1128,8 +1153,8 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
             }
 
             const auto temperature_age =
-                completed_us >= last_temperature_timestamp_us_
-                    ? completed_us - last_temperature_timestamp_us_
+                completed_us >= temperature_conversion_started_us_
+                    ? completed_us - temperature_conversion_started_us_
                     : static_cast<std::uint64_t>(
                           config_.maximum_temperature_age_us) +
                           1U;
@@ -1147,8 +1172,11 @@ auto Ms5611StateMachine::step_at(const std::uint64_t now_us) noexcept
                      interfaces::I2cStatus::Ok, false);
                 break;
             }
-            last_pressure_timestamp_us_ = completed_us;
-            publish_sample(compensated.value, completed_us, result);
+            const domain::AcquisitionWindow acquisition{
+                pressure_conversion_started_us_, completed_us};
+            last_pressure_timestamp_us_ = acquisition.midpoint_us();
+            publish_sample(compensated.value, last_pressure_timestamp_us_,
+                           acquisition.wire_uncertainty_us(), result);
             health_.last_i2c_status = status;
             state_ = Ms5611State::Idle;
             deadline_us_ = next_deadline_us();
@@ -1266,6 +1294,34 @@ auto SharedSensorScheduler::step() noexcept -> SchedulerStepResult {
         }
     }
     return scheduled;
+}
+
+auto SharedSensorScheduler::service_ready(
+    const std::uint8_t maximum_state_advances) noexcept
+    -> SchedulerServiceResult {
+    SchedulerServiceResult aggregate{};
+    if (maximum_state_advances == 0U) return aggregate;
+
+    for (std::uint8_t attempt = 0U;
+         attempt < maximum_state_advances;
+         ++attempt) {
+        const auto scheduled = step();
+        if (!scheduled.step.state_advanced) break;
+
+        ++aggregate.state_advances;
+        aggregate.sample_published =
+            aggregate.sample_published || scheduled.step.sample_published;
+        if (scheduled.step.bus_operation) {
+            aggregate.bus_operation = true;
+            break;
+        }
+        if (scheduled.step.bus_settle_until_us != 0U) break;
+    }
+
+    aggregate.budget_exhausted =
+        aggregate.state_advances == maximum_state_advances &&
+        !aggregate.bus_operation;
+    return aggregate;
 }
 
 auto SharedSensorScheduler::next_deadline_us() const noexcept
